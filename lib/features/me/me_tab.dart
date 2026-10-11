@@ -40,11 +40,15 @@ class MeTab extends StatelessWidget {
         Card(
           child: Column(
             children: [
-              _tile(context, Icons.account_balance_wallet_outlined, '积分流水', () => context.go('/points-flow')),
+              _tile(context, Icons.account_balance_wallet_outlined, '积分流水', () => context.push('/points-flow')),
               const Divider(height: 1),
-              _tile(context, Icons.qr_code_outlined, '我的推荐码（邀请好友）', () {}),
+              _tile(context, Icons.receipt_long_outlined, '我的订单', () => context.push('/orders')),
               const Divider(height: 1),
-              _tile(context, Icons.devices_other, '我的机器', () {}),
+              _tile(context, Icons.location_on_outlined, '收货地址', () => context.push('/addresses')),
+              const Divider(height: 1),
+              _tile(context, Icons.qr_code_outlined, '我的推荐码（邀请好友）', () => context.push('/referral')),
+              const Divider(height: 1),
+              _tile(context, Icons.devices_other, '我的机器', () => context.push('/machines')),
             ],
           ),
         ),
@@ -64,7 +68,7 @@ class MeTab extends StatelessWidget {
         FilledButton.tonal(
           style: FilledButton.styleFrom(
             foregroundColor: Colors.red,
-            minimumSize: const Size.fromHeight(48),
+            minimumSize: const Size(double.infinity, 48),
           ),
           onPressed: () async {
             await showDialog(

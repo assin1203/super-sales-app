@@ -7,6 +7,11 @@ class TeamTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 成员按顺序从左到右填 7 个座位（第一行 3 + 第二行 4），空位自动排在最右侧
+    final slots = List<String?>.filled(_seatCount, null);
+    for (var i = 0; i < _members.length; i++) {
+      slots[i] = _members[i];
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -25,33 +30,17 @@ class TeamTab extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(child: _seat('我（队长）', true)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _seat('138****1002')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _seat('空位', false, true)),
-                  ],
-                ),
+                _seatRow(slots.sublist(0, 3)),
                 const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(child: _seat('138****1003')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _seat('138****1004')),
-                    const SizedBox(width: 8),
-                    Expanded(child: _seat('空位', false, true)),
-                  ],
-                ),
+                _seatRow(slots.sublist(3)),
                 const SizedBox(height: 12),
-                const LinearProgressIndicator(value: 5 / 7, minHeight: 8),
+                LinearProgressIndicator(value: _members.length / _seatCount, minHeight: 8),
                 const SizedBox(height: 8),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    Text('满员 5/7 · 满员即触发分红', style: TextStyle(color: Colors.black54, fontSize: 13)),
-                    Text('已分红 2 轮', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                  children: [
+                    Text('满员 ${_members.length}/$_seatCount · 满员即触发分红', style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                    const Text('已分红 2 轮', style: TextStyle(color: Colors.black54, fontSize: 13)),
                   ],
                 ),
               ],
@@ -87,16 +76,41 @@ class TeamTab extends StatelessWidget {
     );
   }
 
-  Widget _seat(String label, [bool self = false, bool empty = false]) {
+  /// 第一行座位数（1 队长 + 2 成员），第二行 _seatCount - 3
+  static const int _seatCount = 7;
+
+  /// 团队成员按顺序排列（含队长），不足 _seatCount 时右侧补空位
+  static const List<String> _members = [
+    '我（队长）',
+    '138****1002',
+    '138****1003',
+    '138****1004',
+    '138****1005',
+  ];
+
+  Widget _seatRow(List<String?> row) {
+    return Row(
+      children: [
+        for (var i = 0; i < row.length; i++) ...[
+          if (i > 0) const SizedBox(width: 8),
+          Expanded(child: _seat(row[i])),
+        ],
+      ],
+    );
+  }
+
+  Widget _seat(String? label) {
+    final empty = label == null;
+    final self = label == '我（队长）';
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: empty ? Colors.grey.shade100 : (self ? const Color(0xFF1677FF).withOpacity(0.1) : Colors.white),
+        color: empty ? Colors.grey.shade100 : (self ? const Color(0xFF1677FF).withValues(alpha: 0.1) : Colors.white),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: empty ? Colors.grey.shade300 : Colors.transparent),
       ),
       alignment: Alignment.center,
-      child: Text(label, style: TextStyle(fontSize: 12, color: empty ? Colors.black45 : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
+      child: Text(empty ? '空位' : label, style: TextStyle(fontSize: 12, color: empty ? Colors.black45 : Colors.black87), maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 

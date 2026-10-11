@@ -72,65 +72,71 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 96),
-              Text('超级展业', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: kqwPrimary)),
-              const SizedBox(height: 8),
-              const Text('零收费 · 积分展业 · 团队分红', style: TextStyle(color: Colors.black54)),
-              const SizedBox(height: 48),
-              TextField(
-                controller: _phoneCtrl,
-                keyboardType: TextInputType.phone,
-                maxLength: 11,
-                decoration: const InputDecoration(
-                  labelText: '手机号',
-                  prefixIcon: Icon(Icons.phone_outlined),
-                  border: OutlineInputBorder(),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('超级展业', style: TextStyle(fontSize: 34, fontWeight: FontWeight.bold, color: kqwPrimary)),
+                const SizedBox(height: 8),
+                const Text('零收费 · 积分展业 · 团队分红', style: TextStyle(color: Colors.black54)),
+                const SizedBox(height: 48),
+                TextField(
+                  controller: _phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 11,
+                  decoration: const InputDecoration(
+                    labelText: '手机号',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                    counter: SizedBox.shrink(),
+                    border: OutlineInputBorder(),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _codeCtrl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 6,
-                      decoration: const InputDecoration(
-                        labelText: '验证码',
-                        prefixIcon: Icon(Icons.lock_outline),
-                        border: OutlineInputBorder(),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _codeCtrl,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: const InputDecoration(
+                          labelText: '验证码',
+                          prefixIcon: Icon(Icons.lock_outline),
+                          counter: SizedBox.shrink(),
+                          border: OutlineInputBorder(),
+                        ),
                       ),
                     ),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: (_sending || _countdown > 0) ? null : _sendCode,
+                      child: _countdown > 0 ? Text('${_countdown}s 后重发') : const Text('获取验证码'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: _logging ? null : _login,
+                    child: _logging
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('登录 / 注册'),
                   ),
-                  const SizedBox(width: 12),
-                  OutlinedButton(
-                    onPressed: (_sending || _countdown > 0) ? null : _sendCode,
-                    child: _countdown > 0 ? Text('${_countdown}s 后重发') : const Text('获取验证码'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-              FilledButton(
-                onPressed: _logging ? null : _login,
-                child: _logging
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('登录 / 注册'),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  TextButton(onPressed: () {}, child: const Text('用户协议')),
-                  Text(' · '),
-                  TextButton(onPressed: () {}, child: const Text('隐私政策')),
-                ],
-              ),
-            ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton(onPressed: () {}, child: const Text('用户协议')),
+                    Text(' · '),
+                    TextButton(onPressed: () {}, child: const Text('隐私政策')),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

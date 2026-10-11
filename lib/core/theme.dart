@@ -12,7 +12,7 @@ final ThemeData kqwTheme = ThemeData(
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   ),
   filledButtonTheme: FilledButtonThemeData(
-    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+    style: FilledButton.styleFrom(minimumSize: const Size(64, 48)),
   ),
 );
 
