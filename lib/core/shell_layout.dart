@@ -16,24 +16,25 @@ class ShellLayout extends StatelessWidget {
   }
 }
 
+/// 底部导航：只保留 首页 / 商城 / 我的，其余功能入口均收进「我的」。
 class BottomNav extends StatelessWidget {
   const BottomNav({super.key});
 
   static const _items = [
     (path: '/', icon: Icons.home_outlined, active: Icons.home, label: '首页'),
     (path: '/mall', icon: Icons.storefront_outlined, active: Icons.storefront, label: '商城'),
-    (path: '/team', icon: Icons.account_tree_outlined, active: Icons.account_tree, label: '团队'),
-    (path: '/tasks', icon: Icons.task_alt_outlined, active: Icons.task_alt, label: '任务'),
     (path: '/me', icon: Icons.person_outline, active: Icons.person, label: '我的'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
-    final currentIndex = _items.indexWhere((i) => location.startsWith(i.path));
+    var currentIndex = _items.indexWhere(
+      (i) => location == i.path || location.startsWith('${i.path}/'),
+    );
+    if (currentIndex < 0) currentIndex = 0;
     return BottomNavigationBar(
-      currentIndex: currentIndex < 0 ? 0 : currentIndex,
-      type: BottomNavigationBarType.fixed,
+      currentIndex: currentIndex,
       items: _items
           .map((i) => BottomNavigationBarItem(icon: Icon(i.icon), activeIcon: Icon(i.active), label: i.label))
           .toList(),

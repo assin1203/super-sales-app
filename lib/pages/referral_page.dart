@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../core/theme.dart';
+import '../core/toast.dart';
 
 /// 我的推荐（FR-1.2：推荐码二维码展示 + 分享微信）
 class ReferralPage extends StatelessWidget {
@@ -124,13 +125,11 @@ class ReferralPage extends StatelessWidget {
 
   void _shareWechat(BuildContext context) {
     // TODO: 接入 share_plus / 微信 SDK 分享（当前 mock）
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('「超级展业 · 推荐码 $_code」已发送到微信（mock）')),
-    );
+    showToast(context, '「超级展业 · 推荐码 $_code」已发送到微信（mock）');
   }
 
   void _copyCode(BuildContext context) {
     // TODO: 接入 Clipboard（当前 mock）
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('推荐码 $_code 已复制（mock）')));
+    showToast(context, '推荐码 $_code 已复制（mock）');
   }
 }

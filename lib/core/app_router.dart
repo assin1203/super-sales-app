@@ -10,6 +10,7 @@ import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
 import '../pages/orders_page.dart';
 import '../pages/points_flow_page.dart';
+import '../pages/profile_page.dart';
 import '../pages/referral_page.dart';
 import '../pages/room_detail_page.dart';
 import 'auth_provider.dart';
@@ -30,15 +31,17 @@ GoRouter appRouter(AuthProvider auth) {
         routes: [
           GoRoute(path: '/', builder: (c, s) => const HomeTab()),
           GoRoute(path: '/mall', builder: (c, s) => const MallTab()),
-          GoRoute(path: '/team', builder: (c, s) => const TeamTab()),
-          GoRoute(path: '/tasks', builder: (c, s) => const TaskTab()),
           GoRoute(path: '/me', builder: (c, s) => const MeTab()),
         ],
       ),
+      // 团队/任务不再是底部导航页，从「我的」宫格进入，使用独立页面
+      GoRoute(path: '/team', builder: (c, s) => const TeamTab()),
+      GoRoute(path: '/tasks', builder: (c, s) => const TaskTab()),
       GoRoute(path: '/points-flow', builder: (c, s) => const PointsFlowPage()),
       GoRoute(path: '/orders', builder: (c, s) => const OrdersPage()),
       GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
       GoRoute(path: '/referral', builder: (c, s) => const ReferralPage()),
+      GoRoute(path: '/profile', builder: (c, s) => const ProfilePage()),
       GoRoute(path: '/machines', builder: (c, s) => const MachinesPage()),
       GoRoute(
         path: '/room/:roomId',

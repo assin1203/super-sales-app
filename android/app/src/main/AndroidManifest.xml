@@ -1,4 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 联网权限：release 构建默认不含 INTERNET（仅 debug/profile 声明），
+         接入真实 API 时 release 包会无法联网，故在主清单显式声明。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="kqw_app"
         android:name="${applicationName}"

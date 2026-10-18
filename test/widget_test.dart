@@ -6,6 +6,6 @@ void main() {
     await tester.pumpWidget(const KqwApp());
     await tester.pumpAndSettle();
     expect(find.text('超级展业'), findsWidgets);
-    expect(find.text('登录 / 注册'), findsOneWidget);
+    expect(find.text('登录'), findsOneWidget);
   });
 }

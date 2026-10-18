@@ -12,7 +12,7 @@ void main() {
   testWidgets('登录后首页正常渲染', (tester) async {
     final auth = AuthProvider();
     auth.init();
-    await auth.loginSms('13800000001', '123456');
+    await auth.loginPassword('13800000001', '123456');
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
         value: auth,
@@ -20,14 +20,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('积分余额'), findsOneWidget);
+    expect(find.text('积分礼包'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('会员等级进度'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('会员等级进度'), findsOneWidget);
   });
 
   testWidgets('登录后商城页正常渲染', (tester) async {
     final auth = AuthProvider();
     auth.init();
-    await auth.loginSms('13800000001', '123456');
+    await auth.loginPassword('13800000001', '123456');
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
         value: auth,
@@ -44,7 +45,7 @@ void main() {
   testWidgets('我的推荐页渲染（二维码 + 分享微信）', (tester) async {
     final auth = AuthProvider();
     auth.init();
-    await auth.loginSms('13800000001', '123456');
+    await auth.loginPassword('13800000001', '123456');
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
         value: auth,
@@ -63,7 +64,7 @@ void main() {
   testWidgets('我的机器页渲染（编号/开机时间/推荐/新手任务 + 添加按钮）', (tester) async {
     final auth = AuthProvider();
     auth.init();
-    await auth.loginSms('13800000001', '123456');
+    await auth.loginPassword('13800000001', '123456');
     await tester.pumpWidget(
       ChangeNotifierProvider<AuthProvider>.value(
         value: auth,

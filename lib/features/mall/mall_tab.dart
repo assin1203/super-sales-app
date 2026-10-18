@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme.dart';
+import '../../core/toast.dart';
 
 /// 积分商城（FR-5.x：纯积分兑换，按等级分池）
 class MallTab extends StatefulWidget {
@@ -201,7 +202,7 @@ class _MallTabState extends State<MallTab> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「${p.name}」兑换成功（mock）')));
+              showToast(context, '「${p.name}」兑换成功（mock）');
             },
             child: const Text('确认'),
           ),

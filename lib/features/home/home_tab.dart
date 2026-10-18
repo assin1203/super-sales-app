@@ -1,158 +1,122 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/api_client.dart';
 import '../../core/theme.dart';
+import '../../core/toast.dart';
 
-/// 首页（FR-2.3 等级进度 / FR-3.4 达标进度 25 天倒计时）
-class HomeTab extends StatefulWidget {
+/// 首页：积分礼包（五个）+ 等级进度 / 机器达标监控 / 任务中心 / 平台公告
+class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
-  @override
-  State<HomeTab> createState() => _HomeTabState();
-}
-
-class _HomeTabState extends State<HomeTab> {
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    await api.get('/user/home');
-    if (mounted) setState(() => _loading = false);
-  }
+  static const _gifts = [
+    _Gift('200 积分礼包', '200 积分'),
+    _Gift('300 积分礼包', '300 积分'),
+    _Gift('600 积分礼包', '600 积分'),
+    _Gift('白银会员礼包', '300 积分 600 积分'),
+    _Gift('黄金会员礼包', '300 积分 600 积分'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
-        _heroCard(),
-        const SizedBox(height: 16),
-        _quickActions(),
-        const SizedBox(height: 16),
+        _banner(),
+        for (final g in _gifts)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: _giftCard(context, g),
+          ),
         _levelCard(),
         const SizedBox(height: 12),
         _machineCard(),
+        const SizedBox(height: 12),
+        _taskCard(context),
         const SizedBox(height: 12),
         _noticeCard(),
       ],
     );
   }
 
-  /// 顶部渐变卡：问候 + 积分余额 + 流水入口
-  Widget _heroCard() {
+  // ---------- 顶部横幅 ----------
+
+  Widget _banner() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1677FF), Color(0xFF4096FF)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+      padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+      decoration: const BoxDecoration(gradient: kqwHeaderGradient, borderRadius: BorderRadius.all(Radius.circular(16))),
+      child: Stack(
         children: [
-          Row(
+          Positioned(top: -50, right: -30, child: _circle(140)),
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const CircleAvatar(
-                radius: 18,
-                backgroundColor: Colors.white24,
-                child: Icon(Icons.person, color: Colors.white, size: 22),
+              Row(
+                children: [
+                  Icon(Icons.card_giftcard_rounded, color: Colors.white, size: 22),
+                  SizedBox(width: 8),
+                  Text('积分礼包', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
+                ],
               ),
-              const SizedBox(width: 10),
+              SizedBox(height: 8),
+              Text('选购礼包进入队伍，解锁团队分红收益', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _circle(double size) =>
+      Container(width: size, height: size, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x14FFFFFF)));
+
+  // ---------- 礼包卡 ----------
+
+  Widget _giftCard(BuildContext context, _Gift g) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _confirmBuy(context, g),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF2B5BFF), Color(0xFF00A9E8)]),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Icon(Icons.card_giftcard, color: Colors.white, size: 26),
+              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('你好，138****0001', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 2),
-                    const Text('L1 基础会员 · 推荐码 KQW888', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                    Text(g.name, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 6),
+                    Text(g.points, style: pointsTextStyle(size: 17)),
                   ],
                 ),
               ),
-              const Icon(Icons.notifications_none, color: Colors.white70),
-            ],
-          ),
-          const SizedBox(height: 16),
-          const Row(
-            children: [
-              Text('积分余额', style: TextStyle(color: Colors.white70, fontSize: 13)),
-              SizedBox(width: 8),
-            ],
-          ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              const Text('880', style: TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
-              const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Colors.white24,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    minimumSize: const Size(0, 30),
-                  ),
-                  onPressed: () => context.push('/points-flow'),
-                  child: const Text('流水'),
+              const SizedBox(width: 8),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: kqwPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: const Size(0, 36),
+                ),
+                onPressed: () => _confirmBuy(context, g),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('购买', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                    Icon(Icons.chevron_right, size: 16),
+                  ],
                 ),
               ),
-              const Spacer(),
-              const Text('昨日 +300', style: TextStyle(color: Colors.white70, fontSize: 12)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 快捷入口四宫格
-  Widget _quickActions() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          Expanded(child: _quickItem(Icons.storefront, '积分商城', () => context.go('/mall'))),
-          const SizedBox(width: 12),
-          Expanded(child: _quickItem(Icons.account_tree, '我的团队', () => context.go('/team'))),
-          const SizedBox(width: 12),
-          Expanded(child: _quickItem(Icons.task_alt, '任务中心', () => context.go('/tasks'))),
-          const SizedBox(width: 12),
-          Expanded(child: _quickItem(Icons.campaign_outlined, '推广活动', () {})),
-        ],
-      ),
-    );
-  }
-
-  Widget _quickItem(IconData icon, String label, VoidCallback onTap) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: kqwPrimary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: kqwPrimary),
-              ),
-              const SizedBox(height: 6),
-              Text(label, style: const TextStyle(fontSize: 12, color: Colors.black87)),
             ],
           ),
         ),
@@ -160,7 +124,28 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 等级进度（L1 → L2 双条件取较优）
+  void _confirmBuy(BuildContext context, _Gift g) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('购买「${g.name}」'),
+        content: const Text('确认购买该积分礼包？\n（mock：支付流程待接入）'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              showToast(context, '「${g.name}」购买成功（mock）');
+            },
+            child: const Text('确认购买'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ---------- 等级进度（L1 → L2 双条件取较优） ----------
+
   Widget _levelCard() {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -195,7 +180,8 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 机器达标监控（25 天 / 1000 元）
+  // ---------- 机器达标监控（25 天 / 1000 元） ----------
+
   Widget _machineCard() {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -263,7 +249,50 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  /// 公告 / 活动卡
+  // ---------- 任务中心（进度 + 入口） ----------
+
+  Widget _taskCard(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.push('/tasks'),
+        child: const Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.task_alt, color: kqwPrimary),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('任务中心', style: TextStyle(fontWeight: FontWeight.w600))),
+                  Text('剩 21 天', style: TextStyle(color: Colors.black54, fontSize: 12)),
+                  SizedBox(width: 6),
+                  Icon(Icons.chevron_right, size: 18, color: kqwTextSecondary),
+                ],
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Text('新手任务 3/6', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                  Spacer(),
+                  Text('今日签到 +2 分', style: TextStyle(color: Colors.black54, fontSize: 13)),
+                ],
+              ),
+              SizedBox(height: 6),
+              LinearProgressIndicator(value: 0.5, minHeight: 8, borderRadius: BorderRadius.all(Radius.circular(4))),
+              SizedBox(height: 8),
+              Text('再完成「T-N4 首次推荐」得 50 积分', style: TextStyle(color: Colors.black45, fontSize: 12)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ---------- 公告 / 活动卡 ----------
+
   Widget _noticeCard() {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -302,4 +331,11 @@ class _HomeTabState extends State<HomeTab> {
       ),
     );
   }
+}
+
+class _Gift {
+  const _Gift(this.name, this.points);
+
+  final String name;
+  final String points;
 }

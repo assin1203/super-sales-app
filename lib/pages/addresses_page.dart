@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
+import '../core/toast.dart';
 
 /// 收货地址管理（列表 / 新增 / 编辑 / 设默认 / 删除，mock 数据）
 class AddressesPage extends StatefulWidget {
@@ -92,7 +93,7 @@ class _AddressesPageState extends State<AddressesPage> {
                         }
                         a.isDefault = true;
                       });
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已设为默认地址（mock）')));
+                      showToast(context, '已设为默认地址（mock）');
                     },
                     child: const Text('设为默认'),
                   ),
@@ -194,7 +195,7 @@ class _AddressesPageState extends State<AddressesPage> {
                 final region = regionCtrl.text.trim();
                 final detail = detailCtrl.text.trim();
                 if (name.isEmpty || phone.length < 11 || region.isEmpty || detail.isEmpty) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('请完整填写收货人、手机号、地区、详细地址')));
+                  showToast(ctx, '请完整填写收货人、手机号、地区、详细地址');
                   return;
                 }
                 final addr = _Address(name: name, phone: phone, region: region, detail: detail, isDefault: isDefault);
@@ -212,7 +213,7 @@ class _AddressesPageState extends State<AddressesPage> {
                   }
                 });
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(index == null ? '地址已添加（mock）' : '地址已更新（mock）')));
+                showToast(context, index == null ? '地址已添加（mock）' : '地址已更新（mock）');
               },
               child: const Text('保存'),
             ),
@@ -242,7 +243,7 @@ class _AddressesPageState extends State<AddressesPage> {
                 }
               });
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('地址已删除（mock）')));
+              showToast(context, '地址已删除（mock）');
             },
             child: const Text('删除'),
           ),

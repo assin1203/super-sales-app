@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme.dart';
+import '../core/toast.dart';
 
 /// 我的机器（FR-3.x：机器编号 / 开机时间 / 推荐人 / 新手任务完成状态）
 class MachinesPage extends StatefulWidget {
@@ -165,9 +166,7 @@ class _MachinesPageState extends State<MachinesPage> {
 
   void _submitAddRequest(BuildContext context) {
     // TODO: 接入 api.post('/machine/apply') 提交装机申请
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('信息已发送到后台，客服会尽快联系您')),
-    );
+    showToast(context, '信息已发送到后台，客服会尽快联系您');
   }
 
   void _submitNewbieDone(_Machine m) {
@@ -178,12 +177,9 @@ class _MachinesPageState extends State<MachinesPage> {
       m.status = NewbieStatus.reviewing;
       m.progress = '已提交达标申请 · ${now.month}-${pad(now.day)} ${pad(now.hour)}:${pad(now.minute)}';
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('达标申请已提交，后台人工审核通过后会发放奖励（mock）')),
-    );
+    showToast(context, '达标申请已提交，后台人工审核通过后会发放奖励（mock）');
   }
 }
-
 class _Machine {
   _Machine({
     required this.sn,
