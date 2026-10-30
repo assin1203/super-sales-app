@@ -2,7 +2,7 @@
 <!-- 联调期明文 HTTP 放行：后端暂未上 https，Android 9+ 默认拦截明文请求。
      本配置只在 debug / profile 清单里引用，release 包不引用，
      因此发布包仍强制 https（明文流量能力不会被带到线上）。
-     用 --dart-define 换任意局域网 IP 都能连上，不受固定白名单限制。 -->
+     用 dart-define 换任意局域网 IP 都能连上，不受固定白名单限制。 -->
 <network-security-config>
     <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

@@ -5,6 +5,7 @@ import '../features/mall/mall_tab.dart';
 import '../features/me/me_tab.dart';
 import '../features/task/task_tab.dart';
 import '../features/team/team_tab.dart';
+import '../pages/add_machine_page.dart';
 import '../pages/addresses_page.dart';
 import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
@@ -50,10 +51,8 @@ GoRouter appRouter(AuthProvider auth) {
       GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
       GoRoute(path: '/referral', builder: (c, s) => const ReferralPage()),
       GoRoute(path: '/profile', builder: (c, s) => const ProfilePage()),
-      GoRoute(
-          path: '/machines',
-          builder: (c, s) =>
-              MachinesPage(autoApply: s.uri.queryParameters['apply'] == '1')),
+      GoRoute(path: '/machines', builder: (c, s) => const MachinesPage()),
+      GoRoute(path: '/machine/add', builder: (c, s) => const AddMachinePage()),
       GoRoute(path: '/packages', builder: (c, s) => const PackagesPage()),
       GoRoute(path: '/password', builder: (c, s) => const PasswordPage()),
       GoRoute(

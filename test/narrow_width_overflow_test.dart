@@ -102,6 +102,7 @@ void main() {
     '/referral',
     '/profile',
     '/machines',
+    '/machine/add',
     '/room/1',
   ];
 

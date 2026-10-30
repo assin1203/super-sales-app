@@ -407,7 +407,7 @@ class _MeTabState extends State<MeTab> {
           Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
       if (canInstall)
         _GridEntry(Icons.install_desktop, '安装POS',
-            () => context.push('/machines?apply=1')),
+            () => context.push('/machine/add')),
     ];
 
     final rows = <Widget>[];

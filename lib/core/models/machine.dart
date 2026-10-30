@@ -183,3 +183,67 @@ class MachineApplyResult {
         submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
       );
 }
+
+/// 品牌下拉项（GET /pos/brands，后台可配，仅下发启用项）
+class PosBrandOption {
+  const PosBrandOption({required this.id, required this.name, this.logo = ''});
+
+  final String id;
+  final String name;
+  final String logo;
+
+  factory PosBrandOption.fromJson(Map<String, dynamic> json) => PosBrandOption(
+        id: '${json['id'] ?? ''}',
+        name: json['name'] as String? ?? '',
+        logo: json['logo'] as String? ?? '',
+      );
+}
+
+/// 类型下拉项（GET /pos/types）
+class PosTypeOption {
+  const PosTypeOption({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory PosTypeOption.fromJson(Map<String, dynamic> json) => PosTypeOption(
+        id: '${json['id'] ?? ''}',
+        name: json['name'] as String? ?? '',
+      );
+}
+
+/// 新增机器结果（POST /pos/machines）
+///
+/// [customerUserId] 为 null 表示机号没查到归属用户，后端按"空着"处理。
+class MachineAddResult {
+  const MachineAddResult({
+    required this.applyId,
+    required this.machineNo,
+    required this.status,
+    required this.statusName,
+    this.customerUserId,
+    this.submittedAt,
+  });
+
+  final String applyId;
+  final String machineNo;
+  final String? customerUserId;
+  final int status;
+  final String statusName;
+  final DateTime? submittedAt;
+
+  factory MachineAddResult.fromJson(Map<String, dynamic> json) {
+    final raw = json['customerUserId'];
+    return MachineAddResult(
+      applyId: '${json['applyId'] ?? ''}',
+      machineNo: json['machineNo'] as String? ?? '',
+      customerUserId: raw == null ? null : '$raw',
+      status: (json['status'] as num?)?.toInt() ?? 0,
+      statusName: json['statusName'] as String? ?? '',
+      submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+    );
+  }
+
+  /// 是否已绑定到已有客户
+  bool get bound => customerUserId != null;
+}
