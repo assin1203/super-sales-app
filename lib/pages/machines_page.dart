@@ -10,8 +10,9 @@ import '../core/widgets/async_view.dart';
 
 /// 我的机器（FR-3.x：机器编号 / 开机时间 / 推荐人 / 新手任务完成状态）
 ///
-/// 数据源 `GET /pos/machines`；提交达标走 `POST /pos/newbie/submit`，
-/// 新增机器跳 `/machine/add`（该页目前只有 UI，接口未接）。
+/// 数据源 `GET /pos/machines`：已装机机器分页 + `applies`（申请中的新增机器）。
+/// 同一用户/同一客户手机号可以有多台，申请中的记录在装机完成前也能看到。
+/// 提交达标走 `POST /pos/newbie/submit`，新增机器跳 `/machine/add`。
 class MachinesPage extends StatefulWidget {
   const MachinesPage({super.key});
 
@@ -21,6 +22,7 @@ class MachinesPage extends StatefulWidget {
 
 class _MachinesPageState extends State<MachinesPage> {
   List<Machine> _machines = const [];
+  List<MachineApply> _applies = const [];
   bool _loading = true;
   String? _error;
   String? _busySn;
@@ -43,16 +45,18 @@ class _MachinesPageState extends State<MachinesPage> {
       _error = null;
     });
     try {
-      final page = await posApi.machines();
+      final list = await posApi.machines();
       if (!mounted) return;
       setState(() {
-        _machines = page.items;
+        _machines = list.items;
+        _applies = list.applies;
         _error = null;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _machines = const [];
+        _applies = const [];
         _error = e.displayMessage;
       });
     } finally {
@@ -88,16 +92,93 @@ class _MachinesPageState extends State<MachinesPage> {
         child: AsyncStateView(
           loading: _loading,
           error: _error,
-          isEmpty: _machines.isEmpty,
+          isEmpty: _machines.isEmpty && _applies.isEmpty,
           onRetry: _load,
-          emptyText: '还没有机器，点右下角申请装机',
+          emptyText: '还没有机器，点右下角添加新机器',
           emptyIcon: Icons.point_of_sale_outlined,
-          child: ListView.separated(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            itemCount: _machines.length,
-            separatorBuilder: (_, __) => const SizedBox(height: 12),
-            itemBuilder: (context, i) => _machineCard(_machines[i]),
+            children: [
+              if (_applies.isNotEmpty) ...[
+                _sectionTitle('申请中的机器（${_applies.length}）'),
+                for (final apply in _applies) ...[
+                  _applyCard(apply),
+                  const SizedBox(height: 12),
+                ],
+              ],
+              if (_machines.isNotEmpty) ...[
+                _sectionTitle('已装机机器（${_machines.length}）'),
+                for (final machine in _machines) ...[
+                  _machineCard(machine),
+                  const SizedBox(height: 12),
+                ],
+              ],
+            ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: const TextStyle(
+            fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black54),
+      ),
+    );
+  }
+
+  /// 申请中的机器：还没落到 pos_task，只展示机号/品牌类型/客户手机号/状态
+  Widget _applyCard(MachineApply a) {
+    final (statusColor, statusText) = switch (a.status) {
+      1 => (const Color(0xFF3F8600), '已通过'),
+      2 => (const Color(0xFFE53935), '已拒绝'),
+      _ => (const Color(0xFFB25E00), '待处理'),
+    };
+    final meta = [a.brandName, a.typeName].where((v) => v != null && v.isNotEmpty).join(' · ');
+
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.qr_code_2, size: 18, color: kqwPrimary),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(a.machineNo,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, fontSize: 15)),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    a.statusName.isEmpty ? statusText : a.statusName,
+                    style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _infoItem(Icons.phone_iphone, '客户手机号',
+                a.customerPhone.isEmpty ? '—' : a.customerPhone),
+            _infoItem(Icons.dvr, '品牌/类型', meta.isEmpty ? '—' : meta),
+            _infoItem(Icons.schedule, '提交时间', formatShortTime(a.submittedAt)),
+          ],
         ),
       ),
     );

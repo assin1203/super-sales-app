@@ -3,6 +3,8 @@
 /// 新手任务状态：0 未开始 / 1 进行中 / 2 审核中 / 3 已完成；
 /// `progress.amount` 与 `target` 为金额字符串（达标门槛默认 1000 元）。
 
+import 'page_result.dart';
+
 /// 推荐人（手机号后端脱敏，仅暴露等级）
 class MachineReferrer {
   const MachineReferrer({required this.phone, required this.level});
@@ -246,4 +248,77 @@ class MachineAddResult {
 
   /// 是否已绑定到已有客户
   bool get bound => customerUserId != null;
+}
+
+/// 申请中的机器（`GET /pos/machines` 的 `applies` 字段，`pos_apply` source=2）。
+///
+/// 同一用户/同一客户手机号可以提交多台：这里只给还没落到 `pos_task`
+/// 的机号，装机完成后正式记录走 [Machine] 列表。
+class MachineApply {
+  const MachineApply({
+    required this.applyId,
+    required this.machineNo,
+    required this.customerPhone,
+    required this.status,
+    required this.statusName,
+    this.brandName,
+    this.typeName,
+    this.customerUserId,
+    this.submittedAt,
+  });
+
+  final String applyId;
+  final String machineNo;
+
+  /// 客户手机号（后端已脱敏）
+  final String customerPhone;
+
+  /// 0 待处理 / 1 已通过 / 2 已拒绝
+  final int status;
+  final String statusName;
+  final String? brandName;
+  final String? typeName;
+  final String? customerUserId;
+  final DateTime? submittedAt;
+
+  factory MachineApply.fromJson(Map<String, dynamic> json) {
+    final rawCustomer = json['customerUserId'];
+    return MachineApply(
+      applyId: '${json['applyId'] ?? ''}',
+      machineNo: json['machineNo'] as String? ?? '',
+      customerPhone: json['customerPhone'] as String? ?? '',
+      status: (json['status'] as num?)?.toInt() ?? 0,
+      statusName: json['statusName'] as String? ?? '',
+      brandName: json['brandName'] as String?,
+      typeName: json['typeName'] as String?,
+      customerUserId: rawCustomer == null ? null : '$rawCustomer',
+      submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+    );
+  }
+}
+
+/// 我的机器列表：已装机机器分页 + 申请中的新增机器。
+///
+/// 后端按 pos_task 的 sn 去重，同一台机器不会同时出现在两个列表里。
+class MachineList {
+  const MachineList({required this.page, this.applies = const []});
+
+  final PageResult<Machine> page;
+  final List<MachineApply> applies;
+
+  List<Machine> get items => page.items;
+  int get total => page.total;
+
+  factory MachineList.fromJson(Map<String, dynamic> json) {
+    final rawApplies = json['applies'];
+    return MachineList(
+      page: PageResult.fromJson(json, Machine.fromJson),
+      applies: rawApplies is List
+          ? rawApplies
+              .whereType<Map>()
+              .map((e) => MachineApply.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
+    );
+  }
 }

@@ -1,6 +1,5 @@
 import '../api_client.dart';
 import '../models/machine.dart';
-import '../models/page_result.dart';
 
 /// POS 机器接口（`/pos/*`）。
 ///
@@ -11,8 +10,8 @@ class PosApi {
 
   final ApiClient _api;
 
-  /// 我的机器列表（需 app token）
-  Future<PageResult<Machine>> machines({
+  /// 我的机器列表（需 app token）：已装机机器分页 + 申请中的新增机器（同一用户可多台）
+  Future<MachineList> machines({
     int? newbieStatus,
     int pageNum = 1,
     int pageSize = 20,
@@ -25,7 +24,7 @@ class PosApi {
         'pageSize': '$pageSize',
       },
     );
-    return PageResult.fromJson(json, Machine.fromJson);
+    return MachineList.fromJson(json);
   }
 
   /// 机器详情（含时间线与奖励状态）
