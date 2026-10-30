@@ -2,6 +2,11 @@
     <!-- 联网权限：release 构建默认不含 INTERNET（仅 debug/profile 声明），
          接入真实 API 时 release 包会无法联网，故在主清单显式声明。 -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 10 及以下保存图片到相册仍需写外部存储；11+ 走分区存储不需要，
+         故用 maxSdkVersion 限制作用范围（gal 保存图片的官方要求）。 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
     <application
         android:label="kqw_app"
         android:name="${applicationName}"

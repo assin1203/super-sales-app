@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// 品牌主色：科技蓝
-const Color kqwPrimary = Color(0xFF2B5BFF);
+/// 品牌主色：品牌红
+const Color kqwPrimary = Color(0xFFE53935);
 
-/// 辅助色：科技青（用于渐变与点缀）
-const Color kqwAccent = Color(0xFF00CFFF);
+/// 辅助色：珊瑚红（用于渐变与点缀）
+const Color kqwAccent = Color(0xFFFF6B4A);
 
-/// 个人中心头部渐变（深空蓝 → 科技青，科技感）
+/// 个人中心头部渐变（深红 → 珊瑚红，品牌感）
 const LinearGradient kqwHeaderGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF1B3BD4), Color(0xFF2B5BFF), Color(0xFF00A9E8)],
+  colors: [Color(0xFFC62828), Color(0xFFE53935), Color(0xFFFF6B4A)],
 );
 
 /// 页面浅色背景
@@ -26,7 +26,7 @@ final ThemeData kqwTheme = ThemeData(
   appBarTheme: const AppBarTheme(
     centerTitle: true,
     backgroundColor: kqwPageBg,
-    foregroundColor: const Color(0xFF1F2430),
+    foregroundColor: Color(0xFF1F2430),
     elevation: 0,
     scrolledUnderElevation: 0,
     titleTextStyle: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Color(0xFF1F2430)),
@@ -57,6 +57,6 @@ final ThemeData kqwTheme = ThemeData(
   ),
 );
 
-/// 积分文字：品牌蓝加粗
+/// 积分文字：品牌红加粗
 TextStyle pointsTextStyle({double size = 16, Color color = kqwPrimary}) =>
     TextStyle(fontSize: size, fontWeight: FontWeight.bold, color: color);

@@ -4,4 +4,6 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 与 debug 一致：性能分析包仍需连内网 http 后端 -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
 </manifest>

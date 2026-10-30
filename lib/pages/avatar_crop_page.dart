@@ -70,10 +70,8 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
     );
   }
 
-  void _onPanUpdate(DragUpdateDetails d) {
-    setState(() => _userOffset = _userOffset + d.delta);
-  }
-
+  /// 只保留 scale 手势：Flutter 不允许 pan + scale 共存（scale 是 pan 的超集）。
+  /// 单指拖动时 `scale == 1`、`focalPointDelta` 即平移量，效果与 onPanUpdate 一致。
   void _onScaleUpdate(ScaleUpdateDetails d) {
     final oldTotal = _totalScale;
     final newTotal = (oldTotal * d.scale).clamp(_baseScale, _baseScale * 4);
@@ -81,10 +79,22 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
     final p = d.focalPoint; // 裁切框坐标系（手势面 = 裁切框）
     setState(() {
       _userScale = newTotal / _baseScale;
-      final oldOffset = _totalOffset;
+      // _totalOffset 是「含 base 的绝对偏移」，_userOffset 是「相对 base 的用户偏移」。
+      // 缩放补偿必须在绝对空间里算，再扣掉新的 base 才能存回 _userOffset；
+      // 直接把绝对偏移写进 _userOffset 会重复叠加 base，表现为首次拖动跳变、之后累积漂移。
+      final img = _image!;
+      final oldTotalOffset = _totalOffset;
+      final absolute = Offset(
+        p.dx - f * (p.dx - oldTotalOffset.dx) + d.focalPointDelta.dx,
+        p.dy - f * (p.dy - oldTotalOffset.dy) + d.focalPointDelta.dy,
+      );
+      final s = _totalScale;
+      final baseX = (frameSize - img.width * s) / 2;
+      final baseY = (frameSize - img.height * s) / 2;
+      // 与 _totalOffset 的钳制保持一致，避免存下越界值导致回拖时出现死区
       _userOffset = Offset(
-        p.dx - f * (p.dx - oldOffset.dx),
-        p.dy - f * (p.dy - oldOffset.dy),
+        (absolute.dx - baseX).clamp(frameSize - img.width * s - baseX, -baseX),
+        (absolute.dy - baseY).clamp(frameSize - img.height * s - baseY, -baseY),
       );
     });
   }
@@ -143,7 +153,6 @@ class _AvatarCropPageState extends State<AvatarCropPage> {
                       ),
                       child: ClipOval(
                         child: GestureDetector(
-                          onPanUpdate: _onPanUpdate,
                           onScaleUpdate: _onScaleUpdate,
                           child: CustomPaint(
                             size: Size(frameSize, frameSize),

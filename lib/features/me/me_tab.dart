@@ -3,44 +3,105 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/points_api.dart';
+import '../../core/api_client.dart';
 import '../../core/auth_provider.dart';
+import '../../core/models/points_summary.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
 
 /// 我的（个人中心）：账户信息 + 积分 + 订单快捷 + 全部功能入口
-/// 底部导航精简后，原「团队」「任务」等入口统一收进本页功能宫格。
-class MeTab extends StatelessWidget {
+///
+/// 数据源：登录态快照 + `GET /user/me`（资料补齐）+ `GET /user/points`（积分概览）。
+class MeTab extends StatefulWidget {
   const MeTab({super.key});
+
+  @override
+  State<MeTab> createState() => _MeTabState();
+}
+
+class _MeTabState extends State<MeTab> {
+  PointsSummary _points = PointsSummary.empty;
+  bool _loaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final auth = context.read<AuthProvider>();
+    if (!auth.loggedIn) return;
+    await auth.loadProfile();
+    try {
+      final points = await pointsApi.summary();
+      if (!mounted) return;
+      setState(() {
+        _points = points;
+        _loaded = true;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (e.code == 10100) {
+        await auth.logout();
+        if (mounted) context.go('/login');
+        return;
+      }
+      setState(() => _loaded = true);
+    }
+  }
+
+  Future<void> _copyInviteCode(String code) async {
+    if (code.isEmpty) {
+      showToast(context, '推广码生成中，稍后下拉刷新');
+      return;
+    }
+    await Clipboard.setData(ClipboardData(text: code));
+    if (mounted) showToast(context, '邀请码已复制');
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     // 外层 ShellLayout 已提供 Scaffold，这里不再嵌套：
     // 嵌套 Scaffold 会让 ScaffoldMessenger 的 SnackBar 在两层各渲染一次。
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
-        _header(context),
-        const SizedBox(height: 16),
-        Card(margin: const EdgeInsets.symmetric(horizontal: 16), child: _ordersCard(context)),
-        const SizedBox(height: 12),
-        Card(margin: const EdgeInsets.symmetric(horizontal: 16), child: _featureGrid(context)),
-        const SizedBox(height: 12),
-        Card(margin: const EdgeInsets.symmetric(horizontal: 16), child: _settingsCard(context)),
-        const SizedBox(height: 24),
-        Center(
-          child: Text('v0.1.0 · 用户 ${auth.userId ?? '-'}',
-              style: const TextStyle(color: Colors.black26, fontSize: 12)),
-        ),
-        const SizedBox(height: 8),
-      ],
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          _header(context, auth),
+          const SizedBox(height: 16),
+          Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: _ordersCard(context)),
+          const SizedBox(height: 12),
+          Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: _featureGrid(context)),
+          const SizedBox(height: 12),
+          Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: _settingsCard(context)),
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              'v0.1.0 · 用户 ${auth.user?.id ?? '-'}'
+              '${_loaded ? '' : ' · 同步中…'}',
+              style: const TextStyle(color: Colors.black26, fontSize: 12),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 
   // ---------- 渐变头部 ----------
 
-  Widget _header(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
+  Widget _header(BuildContext context, AuthProvider auth) {
+    final inviteCode = auth.user?.inviteCode ?? '';
     return Container(
       decoration: const BoxDecoration(gradient: kqwHeaderGradient),
       child: Stack(
@@ -61,11 +122,7 @@ class MeTab extends StatelessWidget {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: Colors.white.withValues(alpha: 0.22),
-                        child: auth.avatarBytes != null
-                            ? ClipOval(
-                                child: Image.memory(auth.avatarBytes!, width: 60, height: 60, fit: BoxFit.cover),
-                              )
-                            : Image.asset('assets/avatar.jpeg', width: 52, height: 52),
+                        child: _avatar(auth, 60),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -75,42 +132,48 @@ class MeTab extends StatelessWidget {
                             Row(
                               children: [
                                 Flexible(
-                                  child: Text(auth.name ?? '138****0001',
+                                  child: Text(auth.name ?? '未登录',
                                       overflow: TextOverflow.ellipsis,
                                       style: const TextStyle(
-                                          fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white)),
                                 ),
-                                const Icon(Icons.edit, size: 15, color: Colors.white70),
+                                const Icon(Icons.edit,
+                                    size: 15, color: Colors.white70),
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.22),
+                                    color:
+                                        Colors.white.withValues(alpha: 0.22),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Text('L1 基础会员',
-                                      style: TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.w500)),
+                                  child: Text(
+                                      '${auth.user?.levelLabel ?? 'L0'} 会员',
+                                      style: const TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w500)),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 8),
                             InkWell(
                               borderRadius: BorderRadius.circular(8),
-                              onTap: () async {
-                                try {
-                                  await Clipboard.setData(const ClipboardData(text: 'KQW888'));
-                                  if (!context.mounted) return;
-                                  showToast(context, '邀请码已复制');
-                                } catch (_) {
-                                  if (!context.mounted) return;
-                                  showToast(context, '复制失败，请手动选择');
-                                }
-                              },
-                              child: const Row(
+                              onTap: () => _copyInviteCode(inviteCode),
+                              child: Row(
                                 children: [
-                                  Text('邀请码 KQW888', style: TextStyle(fontSize: 13, color: Colors.white70)),
-                                  SizedBox(width: 4),
-                                  Icon(Icons.copy_rounded, size: 14, color: Colors.white70),
+                                  Text(
+                                      inviteCode.isEmpty
+                                          ? '推广码生成中'
+                                          : '邀请码 $inviteCode',
+                                      style: const TextStyle(
+                                          fontSize: 13, color: Colors.white70)),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.copy_rounded,
+                                      size: 14, color: Colors.white70),
                                 ],
                               ),
                             ),
@@ -130,45 +193,91 @@ class MeTab extends StatelessWidget {
     );
   }
 
-  Widget _circle(double size) =>
-      Container(width: size, height: size, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x14FFFFFF)));
+  /// 头像：服务端 URL → 本地新裁切字节 → 默认图
+  Widget _avatar(AuthProvider auth, double size) {
+    final url = auth.avatarUrl;
+    if (url != null && url.isNotEmpty) {
+      return ClipOval(
+        child: Image.network(
+          url,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _avatarFallback(auth, size),
+        ),
+      );
+    }
+    return _avatarFallback(auth, size);
+  }
+
+  Widget _avatarFallback(AuthProvider auth, double size) {
+    final bytes = auth.avatarBytes;
+    if (bytes != null) {
+      return ClipOval(
+        child: Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
+      );
+    }
+    return Image.asset('assets/avatar.jpeg', width: size - 8, height: size - 8);
+  }
+
+  Widget _circle(double size) => Container(
+      width: size,
+      height: size,
+      decoration: const BoxDecoration(
+          shape: BoxShape.circle, color: Color(0x14FFFFFF)));
 
   // ---------- 积分卡（悬浮压在渐变底部） ----------
 
   Widget _pointsCard(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => context.push('/points-flow'),
+      onTap: () => context.push('/points'),
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          boxShadow: const [BoxShadow(color: Color(0x1A2B5BFF), blurRadius: 24, offset: Offset(0, 10))],
+          boxShadow: const [
+            BoxShadow(
+                color: Color(0x1AE53935),
+                blurRadius: 24,
+                offset: Offset(0, 10))
+          ],
         ),
         child: Column(
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Column(
+                Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('总积分', style: TextStyle(fontSize: 13, color: kqwTextSecondary)),
-                    SizedBox(height: 6),
-                    Text('2,680', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: kqwPrimary)),
+                    const Text('可用积分',
+                        style: TextStyle(
+                            fontSize: 13, color: kqwTextSecondary)),
+                    const SizedBox(height: 6),
+                    Text(_points.balance,
+                        style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: kqwPrimary)),
                   ],
                 ),
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   decoration: BoxDecoration(
                     color: kqwPrimary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: const Row(
                     children: [
-                      Text('明细', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kqwPrimary)),
+                      Text('明细',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: kqwPrimary)),
                       Icon(Icons.chevron_right, size: 15, color: kqwPrimary),
                     ],
                   ),
@@ -180,11 +289,11 @@ class MeTab extends StatelessWidget {
             const SizedBox(height: 14),
             Row(
               children: [
-                _stat('1,280', '任务积分'),
+                _stat(_points.totalEarned, '累计获得'),
                 _statDivider(),
-                _stat('860', '分红收益'),
+                _stat(_points.totalSpent, '累计消耗'),
                 _statDivider(),
-                _stat('5/7', '我的团队'),
+                _stat(_points.frozen, '冻结中'),
               ],
             ),
           ],
@@ -196,14 +305,22 @@ class MeTab extends StatelessWidget {
   Widget _stat(String value, String label) => Expanded(
         child: Column(
           children: [
-            Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Color(0xFF1F2430))),
+            Text(value,
+                style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1F2430))),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 12, color: kqwTextSecondary)),
+            Text(label,
+                style:
+                    const TextStyle(fontSize: 12, color: kqwTextSecondary)),
           ],
         ),
       );
 
-  Widget _statDivider() => const SizedBox(width: 12, child: VerticalDivider(width: 1, thickness: 1, color: Color(0xFFEEF1F6)));
+  Widget _statDivider() => const SizedBox(
+      width: 12,
+      child: VerticalDivider(width: 1, thickness: 1, color: Color(0xFFEEF1F6)));
 
   // ---------- 我的订单 ----------
 
@@ -215,13 +332,17 @@ class MeTab extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('我的订单', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              const Text('我的订单',
+                  style:
+                      TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               const Spacer(),
               InkWell(
                 onTap: () => context.push('/orders'),
                 child: const Row(
                   children: [
-                    Text('查看全部订单', style: TextStyle(fontSize: 13, color: kqwTextSecondary)),
+                    Text('查看全部订单',
+                        style:
+                            TextStyle(fontSize: 13, color: kqwTextSecondary)),
                     Icon(Icons.chevron_right, size: 16, color: kqwTextSecondary),
                   ],
                 ),
@@ -231,9 +352,12 @@ class MeTab extends StatelessWidget {
           const SizedBox(height: 18),
           Row(
             children: [
-              _orderQuick(Icons.inventory_2_outlined, '待发货', () => context.push('/orders')),
-              _orderQuick(Icons.local_shipping_outlined, '待收货', () => context.push('/orders')),
-              _orderQuick(Icons.check_circle_outline, '已完成', () => context.push('/orders')),
+              _orderQuick(Icons.inventory_2_outlined, '待发货',
+                  () => context.push('/orders')),
+              _orderQuick(Icons.local_shipping_outlined, '待收货',
+                  () => context.push('/orders')),
+              _orderQuick(Icons.check_circle_outline, '已完成',
+                  () => context.push('/orders')),
             ],
           ),
         ],
@@ -241,7 +365,8 @@ class MeTab extends StatelessWidget {
     );
   }
 
-  Widget _orderQuick(IconData icon, String label, VoidCallback onTap) => Expanded(
+  Widget _orderQuick(IconData icon, String label, VoidCallback onTap) =>
+      Expanded(
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: onTap,
@@ -251,7 +376,9 @@ class MeTab extends StatelessWidget {
               children: [
                 Icon(icon, size: 28, color: kqwPrimary),
                 const SizedBox(height: 8),
-                Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF4A5160))),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF4A5160))),
               ],
             ),
           ),
@@ -260,34 +387,53 @@ class MeTab extends StatelessWidget {
 
   // ---------- 功能宫格（团队/任务等入口都在这里） ----------
 
+  /// 每行格子数，末行不足时补占位，保持列对齐
+  static const int _gridColumns = 4;
+
   Widget _featureGrid(BuildContext context) {
+    // 「安装POS」入口由后台 user.can_install 开关控制显隐
+    // （后台：POST /admin/users/{id}/can-install，C 端见 UserInfo.canInstall）
+    final canInstall = context.watch<AuthProvider>().user?.canInstall ?? false;
+
+    final entries = <_GridEntry>[
+      _GridEntry(Icons.account_tree, '我的团队', () => context.push('/team')),
+      _GridEntry(Icons.task_alt, '任务中心', () => context.push('/tasks')),
+      _GridEntry(Icons.savings, '积分中心', () => context.push('/points')),
+      _GridEntry(Icons.point_of_sale, '我的机器', () => context.push('/machines')),
+      _GridEntry(Icons.qr_code, '推荐海报', () => context.push('/referral')),
+      _GridEntry(Icons.location_on, '收货地址', () => context.push('/addresses')),
+      _GridEntry(Icons.card_giftcard, '积分礼包', () => context.push('/packages')),
+      _GridEntry(
+          Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
+      if (canInstall)
+        _GridEntry(Icons.install_desktop, '安装POS',
+            () => context.push('/machines?apply=1')),
+    ];
+
+    final rows = <Widget>[];
+    for (var start = 0; start < entries.length; start += _gridColumns) {
+      final end = start + _gridColumns > entries.length
+          ? entries.length
+          : start + _gridColumns;
+      final chunk = entries.sublist(start, end);
+      if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
+      rows.add(Row(
+        children: [
+          for (final e in chunk) _gridItem(context, e.icon, e.label, e.onTap),
+          for (var i = chunk.length; i < _gridColumns; i++)
+            const Expanded(child: SizedBox()),
+        ],
+      ));
+    }
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 16, 8, 12),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              _gridItem(context, Icons.account_tree, '我的团队', () => context.push('/team')),
-              _gridItem(context, Icons.task_alt, '任务中心', () => context.push('/tasks')),
-              _gridItem(context, Icons.receipt_long, '积分流水', () => context.push('/points-flow')),
-              _gridItem(context, Icons.point_of_sale, '我的机器', () => context.push('/machines')),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              _gridItem(context, Icons.qr_code, '推荐海报', () => context.push('/referral')),
-              _gridItem(context, Icons.location_on, '收货地址', () => context.push('/addresses')),
-              _gridItem(context, Icons.notifications, '消息通知', () => showToast(context, '功能开发中')),
-              _gridItem(context, Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
-            ],
-          ),
-        ],
-      ),
+      child: Column(children: rows),
     );
   }
 
-  Widget _gridItem(BuildContext context, IconData icon, String label, VoidCallback onTap) {
+  Widget _gridItem(
+      BuildContext context, IconData icon, String label, VoidCallback onTap) {
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -306,7 +452,9 @@ class MeTab extends StatelessWidget {
                 child: Icon(icon, size: 24, color: kqwPrimary),
               ),
               const SizedBox(height: 8),
-              Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF4A5160))),
+              Text(label,
+                  style:
+                      const TextStyle(fontSize: 12, color: Color(0xFF4A5160))),
             ],
           ),
         ),
@@ -319,7 +467,10 @@ class MeTab extends StatelessWidget {
   Widget _settingsCard(BuildContext context) {
     return Column(
       children: [
-        _tile(context, Icons.settings_outlined, '设置', () => showToast(context, '功能开发中')),
+        _tile(context, Icons.lock_outline, '修改密码', () => context.push('/password')),
+        const Divider(height: 1, indent: 56),
+        _tile(context, Icons.settings_outlined, '设置',
+            () => showToast(context, '功能开发中')),
         const Divider(height: 1, indent: 56),
         _tile(
           context,
@@ -331,10 +482,13 @@ class MeTab extends StatelessWidget {
               builder: (ctx) => AlertDialog(
                 title: const Text('确认退出登录？'),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('取消')),
                   FilledButton(
                     onPressed: () {
                       context.read<AuthProvider>().logout();
+                      Navigator.pop(ctx);
                       context.go('/login');
                     },
                     child: const Text('退出'),
@@ -349,7 +503,9 @@ class MeTab extends StatelessWidget {
     );
   }
 
-  Widget _tile(BuildContext context, IconData icon, String title, VoidCallback onTap, {bool red = false}) {
+  Widget _tile(BuildContext context, IconData icon, String title,
+      VoidCallback onTap,
+      {bool red = false}) {
     final color = red ? const Color(0xFFE5484D) : const Color(0xFF1F2430);
     return ListTile(
       leading: Icon(icon, color: color),
@@ -358,4 +514,13 @@ class MeTab extends StatelessWidget {
       onTap: onTap,
     );
   }
+}
+
+/// 功能宫格入口（图标 + 文案 + 点击），由 [_MeTabState._featureGrid] 按行分块渲染
+class _GridEntry {
+  const _GridEntry(this.icon, this.label, this.onTap);
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 }

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="540" viewBox="0 0 1080 540">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF6B4A"/>
+      <stop offset="100%" stop-color="#FF8A65"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="540" fill="url(#bg)"/>
+  <!-- big soft circles -->
+  <circle cx="950" cy="120" r="200" fill="#FFFFFF" opacity="0.1"/>
+  <circle cx="640" cy="480" r="150" fill="#FFFFFF" opacity="0.06"/>
+  <!-- top-left halo -->
+  <circle cx="70" cy="-30" r="170" fill="#FFFFFF" opacity="0.05"/>
+  <!-- shopping bag -->
+  <g transform="translate(830 190)">
+    <rect x="0" y="40" width="150" height="150" rx="22" fill="#FFFFFF" opacity="0.28"/>
+    <path d="M45 45 C45 0, 105 0, 105 45" fill="none" stroke="#FFFFFF" stroke-opacity="0.6" stroke-width="10" stroke-linecap="round"/>
+    <circle cx="75" cy="115" r="26" fill="none" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="6"/>
+  </g>
+  <!-- sparkles -->
+  <path d="M0 -22 C3 -7 7 -3 22 0 C7 3 3 7 0 22 C-3 7 -7 3 -22 0 C-7 -3 -3 -7 0 -22 Z" fill="#FFFFFF" opacity="0.65" transform="translate(680 150)"/>
+  <path d="M0 -22 C3 -7 7 -3 22 0 C7 3 3 7 0 22 C-3 7 -7 3 -22 0 C-7 -3 -3 -7 0 -22 Z" fill="#FFFFFF" opacity="0.5" transform="translate(1020 370) scale(0.8)"/>
+  <path d="M0 -22 C3 -7 7 -3 22 0 C7 3 3 7 0 22 C-3 7 -7 3 -22 0 C-7 -3 -3 -7 0 -22 Z" fill="#FFFFFF" opacity="0.45" transform="translate(750 430) scale(0.6)"/>
+</svg>

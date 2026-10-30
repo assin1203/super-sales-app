@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../core/slider_captcha.dart';
 import '../core/theme.dart';
@@ -56,13 +57,21 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     setState(() => _logging = true);
-    final ok = await context.read<AuthProvider>().loginPassword(
-          _phoneCtrl.text.trim(),
-          _passwordCtrl.text,
-        );
-    if (!mounted) return;
-    setState(() => _logging = false);
-    if (ok) context.go('/');
+    try {
+      await context.read<AuthProvider>().loginPassword(
+            _phoneCtrl.text.trim(),
+            _passwordCtrl.text,
+          );
+      if (!mounted) return;
+      context.go('/');
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      showToast(context, e.displayMessage);
+      // 凭证错误后让用户重新过滑块，避免脚本直接刷登录
+      _resetCaptcha();
+    } finally {
+      if (mounted) setState(() => _logging = false);
+    }
   }
 
   @override
@@ -104,7 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                     textInputAction: TextInputAction.done,
                     onFieldSubmitted: (_) => _login(),
                     style: const TextStyle(fontSize: 15),
-                    validator: (v) => (v == null || v.length < 6) ? '密码至少 6 位' : null,
+                    validator: (v) => (v == null || v.length < 8) ? '密码至少 8 位' : null,
                     decoration: InputDecoration(
                       labelText: '密码',
                       prefixIcon: const Icon(Icons.lock_outline),

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="540" viewBox="0 0 1080 540">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#B71C1C"/>
+      <stop offset="60%" stop-color="#C62828"/>
+      <stop offset="100%" stop-color="#E53935"/>
+    </linearGradient>
+  </defs>
+  <rect width="1080" height="540" fill="url(#bg)"/>
+  <!-- large soft circle bottom-right -->
+  <circle cx="1010" cy="470" r="230" fill="#FFFFFF" opacity="0.06"/>
+  <!-- top-left halo -->
+  <circle cx="60" cy="60" r="150" fill="#FFFFFF" opacity="0.05"/>
+  <!-- orbit rings -->
+  <circle cx="860" cy="260" r="175" fill="none" stroke="#FFFFFF" stroke-opacity="0.25" stroke-width="3"/>
+  <circle cx="860" cy="260" r="105" fill="none" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="2"/>
+  <!-- hub -->
+  <circle cx="860" cy="260" r="34" fill="#FFFFFF" opacity="0.85"/>
+  <circle cx="860" cy="260" r="52" fill="none" stroke="#FFFFFF" stroke-opacity="0.5" stroke-width="2"/>
+  <!-- member nodes on the ring -->
+  <circle cx="860" cy="85" r="24" fill="#FFFFFF" opacity="0.9"/>
+  <circle cx="708" cy="348" r="24" fill="#FFFFFF" opacity="0.75"/>
+  <circle cx="1012" cy="348" r="24" fill="#FFFFFF" opacity="0.75"/>
+  <!-- dots -->
+  <circle cx="620" cy="120" r="6" fill="#FFFFFF" opacity="0.45"/>
+  <circle cx="1050" cy="120" r="8" fill="#FFFFFF" opacity="0.35"/>
+  <circle cx="700" cy="470" r="5" fill="#FFFFFF" opacity="0.4"/>
+</svg>

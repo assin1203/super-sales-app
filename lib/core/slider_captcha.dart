@@ -112,7 +112,7 @@ class _SliderCaptchaState extends State<SliderCaptcha> with TickerProviderStateM
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: const Color(0xFFE6EAF2)),
           boxShadow: const [
-            BoxShadow(color: Color(0x0F2B5BFF), blurRadius: 12, offset: Offset(0, 6)),
+            BoxShadow(color: Color(0x0FE53935), blurRadius: 12, offset: Offset(0, 6)),
           ],
         ),
         clipBehavior: Clip.antiAlias,
@@ -161,7 +161,7 @@ class _SliderCaptchaState extends State<SliderCaptcha> with TickerProviderStateM
                         gradient: LinearGradient(
                           colors: _verified
                               ? [const Color(0xFF2FCC70).withValues(alpha: 0.14), const Color(0xFF2FCC70).withValues(alpha: 0.05)]
-                              : [const Color(0xFF2B5BFF).withValues(alpha: 0.14), const Color(0xFF00CFFF).withValues(alpha: 0.05)],
+                              : [const Color(0xFFE53935).withValues(alpha: 0.14), const Color(0xFFFF6B4A).withValues(alpha: 0.05)],
                         ),
                       ),
                     ),
@@ -196,11 +196,11 @@ class _SliderCaptchaState extends State<SliderCaptcha> with TickerProviderStateM
                               : const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
-                                  colors: [Color(0xFF2B5BFF), Color(0xFF00A9E8)],
+                                  colors: [Color(0xFFE53935), Color(0xFFFF6B4A)],
                                 ),
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: const [
-                            BoxShadow(color: Color(0x2E2B5BFF), blurRadius: 8, offset: Offset(0, 3)),
+                            BoxShadow(color: Color(0x2EE53935), blurRadius: 8, offset: Offset(0, 3)),
                           ],
                         ),
                         alignment: Alignment.center,
@@ -334,7 +334,7 @@ class _CaptchaPainter extends CustomPainter {
         ..shader = const LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Color(0xFF9EC1FF), Color(0xFF6E97F5), Color(0xFF3565EC)],
+          colors: [Color(0xFFFFCDD2), Color(0xFFFF8A80), Color(0xFFE53935)],
           stops: [0, 0.5, 1],
         ).createShader(rect),
     );
@@ -359,7 +359,7 @@ class _CaptchaPainter extends CustomPainter {
       ..quadraticBezierTo(W * 0.78, H * 0.82, W, H * 0.66)
       ..lineTo(W, H)
       ..close();
-    canvas.drawPath(far, Paint()..color = const Color(0xFF4666E6));
+    canvas.drawPath(far, Paint()..color = const Color(0xFFB71C1C));
 
     // 近山
     final near = Path()
@@ -369,7 +369,7 @@ class _CaptchaPainter extends CustomPainter {
       ..quadraticBezierTo(W * 0.88, H * 0.92, W, H * 0.82)
       ..lineTo(W, H)
       ..close();
-    canvas.drawPath(near, Paint()..color = const Color(0xFF2B47D4));
+    canvas.drawPath(near, Paint()..color = const Color(0xFF8E0000));
   }
 
   @override

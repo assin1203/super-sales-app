@@ -9,7 +9,11 @@ import '../pages/addresses_page.dart';
 import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
 import '../pages/orders_page.dart';
+import '../pages/packages_page.dart';
+import '../pages/password_page.dart';
+import '../pages/points_center_page.dart';
 import '../pages/points_flow_page.dart';
+import '../pages/points_transfer_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/referral_page.dart';
 import '../pages/room_detail_page.dart';
@@ -37,12 +41,21 @@ GoRouter appRouter(AuthProvider auth) {
       // 团队/任务不再是底部导航页，从「我的」宫格进入，使用独立页面
       GoRoute(path: '/team', builder: (c, s) => const TeamTab()),
       GoRoute(path: '/tasks', builder: (c, s) => const TaskTab()),
+      GoRoute(path: '/points', builder: (c, s) => const PointsCenterPage()),
+      GoRoute(
+          path: '/points/transfer',
+          builder: (c, s) => const PointsTransferPage()),
       GoRoute(path: '/points-flow', builder: (c, s) => const PointsFlowPage()),
       GoRoute(path: '/orders', builder: (c, s) => const OrdersPage()),
       GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
       GoRoute(path: '/referral', builder: (c, s) => const ReferralPage()),
       GoRoute(path: '/profile', builder: (c, s) => const ProfilePage()),
-      GoRoute(path: '/machines', builder: (c, s) => const MachinesPage()),
+      GoRoute(
+          path: '/machines',
+          builder: (c, s) =>
+              MachinesPage(autoApply: s.uri.queryParameters['apply'] == '1')),
+      GoRoute(path: '/packages', builder: (c, s) => const PackagesPage()),
+      GoRoute(path: '/password', builder: (c, s) => const PasswordPage()),
       GoRoute(
         path: '/room/:roomId',
         builder: (c, s) => RoomDetailPage(roomId: s.pathParameters['roomId']!),

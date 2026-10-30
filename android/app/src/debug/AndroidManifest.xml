@@ -4,4 +4,7 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 明文 HTTP 只在 debug/profile 放行：后端联调期还没上 https，
+         配置挂在 debug 清单上，release 包不会带上，线上流量强制 https。 -->
+    <application android:networkSecurityConfig="@xml/network_security_config" />
 </manifest>
