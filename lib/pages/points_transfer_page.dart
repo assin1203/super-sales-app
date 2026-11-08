@@ -11,8 +11,8 @@ import '../core/toast.dart';
 /// 送积分（FR-8.3 会员互赠）：把积分转给指定手机号的会员。
 ///
 /// 数据源 `POST /points/transfers`：扣转出方 → 加接收方，双方各留一条
-/// `GIFT_PEER` 流水。单次上限 100、每日 5 次由后端判定（60007 / 60008），
-/// 这里只做输入前置校验，规则文案与后端常量保持一致。
+/// `GIFT_PEER` 流水。每日 5 次由后端判定（60008），单次金额不设上限，
+/// 这里只做输入前置校验（正整数 + 不超可用余额），规则文案与后端常量保持一致。
 class PointsTransferPage extends StatefulWidget {
   const PointsTransferPage({super.key, this.api});
 
@@ -24,8 +24,7 @@ class PointsTransferPage extends StatefulWidget {
 }
 
 class _PointsTransferPageState extends State<PointsTransferPage> {
-  /// 对齐后端 MAX_SINGLE_POINTS / MAX_DAILY_TRANSFERS，仅用于提示与前置校验
-  static const int _maxSingle = 100;
+  /// 对齐后端 MAX_DAILY_TRANSFERS，仅用于提示；单次金额不设上限
   static const int _maxDaily = 5;
 
   final _formKey = GlobalKey<FormState>();
@@ -81,7 +80,6 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
     if (text.isEmpty) return '请输入转让积分';
     final points = int.tryParse(text);
     if (points == null || points <= 0) return '积分必须是正整数';
-    if (points > _maxSingle) return '单次最多转让 $_maxSingle 积分';
     if (points > _summary.balanceValue) {
       return '可用积分不足（当前 ${_summary.balance}）';
     }
@@ -192,7 +190,7 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
               _formCard(),
               const SizedBox(height: 12),
               const Text(
-                '· 单次最多 $_maxSingle 积分，每日最多 $_maxDaily 次\n'
+                '· 每日最多 $_maxDaily 次，单次金额不超过可用积分\n'
                 '· 接收方须为已注册会员，按手机号转入\n'
                 '· 转出后不可撤回，双方可在积分流水中查看',
                 style: TextStyle(
@@ -288,7 +286,7 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
               validator: _validatePoints,
               decoration: const InputDecoration(
                 labelText: '赠送积分',
-                hintText: '最多 $_maxSingle',
+                hintText: '不超过可用积分',
                 border: InputBorder.none,
                 suffixText: '积分',
               ),

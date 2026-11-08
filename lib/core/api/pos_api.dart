@@ -1,5 +1,6 @@
 import '../api_client.dart';
 import '../models/machine.dart';
+import '../models/page_result.dart';
 
 /// POS 机器接口（`/pos/*`）。
 ///
@@ -27,6 +28,157 @@ class PosApi {
     return MachineList.fromJson(json);
   }
 
+  /// 我的装机申请列表（需 app token）：`GET /pos/applies`
+  ///
+  /// 与 [machines] 里附带的 `applies` 相比，这个接口支持按状态/来源筛选，
+  /// 且不受机器分页影响，是「已提交」列表的权威数据源。
+  /// [status] 0 待处理 / 1 已通过 / 2 已拒绝，缺省全部；
+  /// [source] 1 装机申请 / 2 新增机器，缺省全部。
+  Future<PageResult<MachineApply>> applies({
+    int? status,
+    int? source,
+    int pageNum = 1,
+    int pageSize = 20,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/pos/applies',
+      query: {
+        if (status != null) 'status': '$status',
+        if (source != null) 'source': '$source',
+        'pageNum': '$pageNum',
+        'pageSize': '$pageSize',
+      },
+    );
+    return PageResult.fromJson(json, MachineApply.fromJson);
+  }
+
+  /// 按客户手机号查待装申请（装机页「先查后装」）：`GET /pos/applies/pending-by-phone`
+  ///
+  /// 只出 status=0 待处理记录，先申请的在前；查不到不抛异常，用 `found=false` 判断。
+  /// 拿到 items 后按 applyId 走 [installApply] 精确绑定，一次装一台。
+  Future<PendingInstallPreview> pendingAppliesByPhone(
+    String phone, {
+    int? source,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/pos/applies/pending-by-phone',
+      query: {
+        'phone': phone,
+        if (source != null) 'source': '$source',
+      },
+    );
+    return PendingInstallPreview.fromJson(json);
+  }
+
+  /// 装机：把审核通过的申请转成正式机器（`POST /pos/applies/{id}/install`）
+  ///
+  /// [machineNo] 申请记录已有机号时可省略，传了必须与记录一致；
+  /// [installMode] 1 平台安装（业务员上门，默认）/ 2 用户自装；
+  /// 其余字段用于申请记录为空时补录。
+  Future<MachineApply> installApply({
+    required String applyId,
+    String? machineNo,
+    int? installMode,
+    String? brandId,
+    String? typeId,
+    DateTime? bootTime,
+    String? contactName,
+    String? merchantName,
+    String? region,
+    String? address,
+    String? remark,
+    String? trafficFeeRemark,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/pos/applies/$applyId/install',
+      body: _installBody(
+        machineNo: machineNo,
+        installMode: installMode,
+        brandId: brandId,
+        typeId: typeId,
+        bootTime: bootTime,
+        contactName: contactName,
+        merchantName: merchantName,
+        region: region,
+        address: address,
+        remark: remark,
+        trafficFeeRemark: trafficFeeRemark,
+      ),
+    );
+    return MachineApply.fromJson(json);
+  }
+
+  /// 按手机号装机（`POST /pos/applies/install`）
+  ///
+  /// [phone] 申请时填写的使用人手机号，据此定位待处理申请，一次只装一台；
+  /// 申请记录还没填的联系人/门店/地区/地址等可在这次一并补录。
+  Future<MachineApply> installApplyByPhone({
+    required String phone,
+    String? machineNo,
+    int? installMode,
+    String? brandId,
+    String? typeId,
+    DateTime? bootTime,
+    String? contactName,
+    String? merchantName,
+    String? region,
+    String? address,
+    String? remark,
+    String? trafficFeeRemark,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/pos/applies/install',
+      body: {
+        'phone': phone,
+        ..._installBody(
+          machineNo: machineNo,
+          installMode: installMode,
+          brandId: brandId,
+          typeId: typeId,
+          bootTime: bootTime,
+          contactName: contactName,
+          merchantName: merchantName,
+          region: region,
+          address: address,
+          remark: remark,
+          trafficFeeRemark: trafficFeeRemark,
+        ),
+      },
+    );
+    return MachineApply.fromJson(json);
+  }
+
+  /// 装机请求体：空值不传，避免覆盖申请记录里已有的值
+  Map<String, dynamic> _installBody({
+    String? machineNo,
+    int? installMode,
+    String? brandId,
+    String? typeId,
+    DateTime? bootTime,
+    String? contactName,
+    String? merchantName,
+    String? region,
+    String? address,
+    String? remark,
+    String? trafficFeeRemark,
+  }) {
+    String? filled(String? value) =>
+        (value != null && value.isNotEmpty) ? value : null;
+    return {
+      if (filled(machineNo) != null) 'machineNo': machineNo,
+      if (installMode != null) 'installMode': '$installMode',
+      if (filled(brandId) != null) 'brandId': brandId,
+      if (filled(typeId) != null) 'typeId': typeId,
+      if (bootTime != null) 'bootTime': _dateText(bootTime),
+      if (filled(contactName) != null) 'contactName': contactName,
+      if (filled(merchantName) != null) 'merchantName': merchantName,
+      if (filled(region) != null) 'region': region,
+      if (filled(address) != null) 'address': address,
+      if (filled(remark) != null) 'remark': remark,
+      if (filled(trafficFeeRemark) != null) 'trafficFeeRemark': trafficFeeRemark,
+    };
+  }
+
   /// 机器详情（含时间线与奖励状态）
   Future<MachineDetail> machineDetail(String sn) async {
     final json = await _api.get<Map<String, dynamic>>('/pos/machines/$sn');
@@ -34,32 +186,50 @@ class PosApi {
   }
 
   /// 提交装机申请（同手机号 7 天内重复申请会被拦截）
+  ///
+  /// [useType] 使用人标记：1 自己用 / 2 他人用。
+  /// 后端 `MachineApplyDto` 尚未加该字段，上线前提交会被后端忽略
+  /// （不影响其余字段落库），后端补齐后无需再改调用方。
+  /// 提交装机申请（`POST /pos/apply`）
+  ///
+  /// [proofImages] 申请时上传的凭证截图 URL（选填，最多 4 张），
+  /// 先调 `POST /common/upload/image` 换地址，空列表不传。
   Future<MachineApplyResult> apply({
     required String contactName,
     required String phone,
+    int? useType,
     String? merchantName,
     String? region,
     String? address,
     String? remark,
+    List<String>? proofImages,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/pos/apply',
       body: {
         'contactName': contactName,
         'phone': phone,
+        if (useType != null) 'useType': useType,
         if (merchantName != null && merchantName.isNotEmpty)
           'merchantName': merchantName,
         if (region != null && region.isNotEmpty) 'region': region,
         if (address != null && address.isNotEmpty) 'address': address,
         if (remark != null && remark.isNotEmpty) 'remark': remark,
+        if (proofImages != null && proofImages.isNotEmpty)
+          'proofImages': proofImages,
       },
     );
     return MachineApplyResult.fromJson(json);
   }
 
-  /// 新手任务提交审核
-  Future<Map<String, dynamic>> submitNewbie(String sn) =>
-      _api.post<Map<String, dynamic>>('/pos/newbie/submit', body: {'sn': sn});
+  /// 新手任务提交审核（成功后后端置「审核中」，返回新状态供页面就地更新）
+  Future<NewbieSubmitResult> submitNewbie(String sn) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/pos/newbie/submit',
+      body: {'sn': sn},
+    );
+    return NewbieSubmitResult.fromJson(json);
+  }
 
   /// 品牌下拉（后台 /admin/pos/brands 维护，仅返回启用项，sort 升序）
   Future<List<PosBrandOption>> brands() async {

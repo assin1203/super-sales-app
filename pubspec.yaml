@@ -1,7 +1,8 @@
 name: kqw_app
 description: 超级展业系统 C 端商户 App（POS 展业 / 积分商城 / 7 人团队 / 任务中心）
 publish_to: "none"
-version: 0.1.0
+# 发版必须递增 build number（`+N` → Android versionCode），App 更新提示按它比较
+version: 0.1.0+1
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -19,6 +20,10 @@ dependencies:
   flutter_secure_storage: ^9.2.2
   gal: ^2.3.3
   mobile_scanner: ^7.4.2
+  # 读取本地安装版本（versionName/versionCode），用于与后端最新版本比较
+  package_info_plus: ^8.1.0
+  # 更新提示里打开 APK 下载地址（外部浏览器）
+  url_launcher: ^6.3.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -29,3 +34,4 @@ flutter:
   assets:
     - assets/
     - assets/carousel/
+    - assets/guide/

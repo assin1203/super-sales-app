@@ -233,7 +233,7 @@ void main() {
     expect(last['points'], 30);
   });
 
-  testWidgets('单次超额与手机号格式在本地就拦下，不发请求', (tester) async {
+  testWidgets('手机号格式与余额不足在本地就拦下，大额转让不再有单次上限', (tester) async {
     final adapter = _FakeAdapter((options) {
       if (options.uri.path == '/user/points') {
         return _json({
@@ -254,12 +254,18 @@ void main() {
     await tester.pump();
     expect(find.text('手机号格式不正确'), findsOneWidget);
 
+    await _fillForm(tester, phone: '13800138000', points: '5000');
+    await tester.tap(find.widgetWithText(FilledButton, '确认赠送'));
+    await tester.pump();
+    expect(find.textContaining('可用积分不足'), findsOneWidget);
+
+    // 500 积分历史上会被单次上限拦下，现在只受可用余额约束 → 直接进确认弹窗
     await _fillForm(tester, phone: '13800138000', points: '500');
     await tester.tap(find.widgetWithText(FilledButton, '确认赠送'));
     await tester.pump();
-    expect(find.text('单次最多转让 100 积分'), findsOneWidget);
+    expect(find.text('确认赠送'), findsWidgets);
 
-    // 前端已经拦住，一个转让请求都没发出去
+    // 前端校验阶段一个转让请求都没发出去
     expect(adapter.transferRequests, isEmpty);
   });
 }

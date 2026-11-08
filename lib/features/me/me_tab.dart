@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/points_api.dart';
 import '../../core/api_client.dart';
+import '../../core/app_update.dart';
 import '../../core/auth_provider.dart';
 import '../../core/models/points_summary.dart';
 import '../../core/theme.dart';
@@ -14,7 +15,10 @@ import '../../core/toast.dart';
 ///
 /// 数据源：登录态快照 + `GET /user/me`（资料补齐）+ `GET /user/points`（积分概览）。
 class MeTab extends StatefulWidget {
-  const MeTab({super.key});
+  const MeTab({super.key, this.updater});
+
+  /// 版本检查器（测试注入；生产用全局 appUpdateChecker）
+  final AppUpdateChecker? updater;
 
   @override
   State<MeTab> createState() => _MeTabState();
@@ -23,6 +27,8 @@ class MeTab extends StatefulWidget {
 class _MeTabState extends State<MeTab> {
   PointsSummary _points = PointsSummary.empty;
   bool _loaded = false;
+
+  late final AppUpdateChecker _updater = widget.updater ?? appUpdateChecker;
 
   @override
   void initState() {
@@ -464,10 +470,15 @@ class _MeTabState extends State<MeTab> {
 
   // ---------- 设置 ----------
 
+  /// 手动检查更新：已是最新/失败都会给一句提示
+  Future<void> _checkUpdate() => _updater.check(context, manual: true);
+
   Widget _settingsCard(BuildContext context) {
     return Column(
       children: [
         _tile(context, Icons.lock_outline, '修改密码', () => context.push('/password')),
+        const Divider(height: 1, indent: 56),
+        _tile(context, Icons.system_update_alt, '检查更新', _checkUpdate),
         const Divider(height: 1, indent: 56),
         _tile(context, Icons.settings_outlined, '设置',
             () => showToast(context, '功能开发中')),

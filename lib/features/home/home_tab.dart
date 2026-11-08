@@ -131,11 +131,17 @@ class _HomeTabState extends State<HomeTab> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.only(bottom: 24),
+        // 首页没有 AppBar，列表从屏幕顶端开始，需自己让出状态栏高度，
+        // 否则顶部「积分礼包」横幅会被系统状态栏压住。
+        padding: EdgeInsets.only(
+          top: MediaQuery.of(context).padding.top + 8,
+          bottom: 24,
+        ),
         children: [
           _banner(),
           _AdCarousel(banners: _banners),
           const SizedBox(height: 12),
+          _applyEntryCard(),
           _noticeCard(),
           const SizedBox(height: 12),
           if (_roomPackages.isEmpty)
@@ -211,6 +217,105 @@ class _HomeTabState extends State<HomeTab> {
       decoration: const BoxDecoration(
           shape: BoxShape.circle, color: Color(0x14FFFFFF)));
 
+  // ---------- 申请 POS 机入口 ----------
+
+  /// 申请入口常驻首页、放在轮播下方：曝光稳定但不占首屏主视觉。
+  /// 点击进 `/machine/apply` 提交，成功后去「我的机器」看申请进度。
+  Widget _applyEntryCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _openApply(),
+          child: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [Color(0xFFFFF3F0), Colors.white],
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 14, 10, 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                        colors: [kqwPrimary, kqwAccent]),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.point_of_sale_rounded,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text('申请 POS 机',
+                              style: TextStyle(
+                                  fontSize: 15, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: kqwPrimary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('免费',
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: kqwPrimary)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '免费申请 · 快速开通 · 装机领积分',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: kqwPrimary,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: const Text('立即申请',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 申请完成后跳「我的机器」：申请中的机器只在那里可见，直接带用户看进度
+  Future<void> _openApply() async {
+    final submitted = await context.push<bool>('/machine/apply');
+    if (!mounted || submitted != true) return;
+    context.push('/machines');
+  }
+
   // ---------- 入房档位卡（只消耗积分，无金额） ----------
 
   /// 档位图：取接口返回的 image（COS 绝对地址），无图或加载失败回落渐变礼盒图标
@@ -275,23 +380,47 @@ class _HomeTabState extends State<HomeTab> {
                 ),
               ),
               const SizedBox(width: 8),
-              TextButton(
-                style: TextButton.styleFrom(
-                  foregroundColor: kqwPrimary,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: const Size(0, 36),
+              if (pkg.purchased)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE8F5E9),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle,
+                          size: 14, color: Color(0xFF2E7D32)),
+                      SizedBox(width: 4),
+                      Text('已完成升级',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF2E7D32))),
+                    ],
+                  ),
+                )
+              else
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: kqwPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: const Size(0, 36),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () => _confirmEnter(context, pkg),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('购买升级礼包',
+                          style: TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w600)),
+                      Icon(Icons.chevron_right, size: 16),
+                    ],
+                  ),
                 ),
-                onPressed: () => _confirmEnter(context, pkg),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text('去入房',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600)),
-                    Icon(Icons.chevron_right, size: 16),
-                  ],
-                ),
-              ),
             ],
           ),
         ),

@@ -6,6 +6,8 @@ import '../core/api_client.dart';
 import '../core/models/machine.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
+import '../core/widgets/async_view.dart';
+import '../core/widgets/install_form_fields.dart';
 import 'scan_page.dart';
 
 /// 新增机器（绑定 POS 设备）。
@@ -40,6 +42,8 @@ class _AddMachinePageState extends State<AddMachinePage> {
   String? _brandId;
   String? _typeId;
   DateTime? _bootDate;
+  /// 安装方式：1 平台安装（业务员上门）/ 2 用户自装
+  int _installMode = 1;
   bool _submitting = false;
 
   @override
@@ -84,7 +88,8 @@ class _AddMachinePageState extends State<AddMachinePage> {
 
   String? _validateSn(String? value) {
     final sn = (value ?? '').trim();
-    if (sn.isEmpty) return '请输入机器序列号';
+    // 申请记录已有机号时可不传，传了必须与记录一致
+    if (sn.isEmpty) return null;
     if (sn.length < 6) return '机器号至少 6 位';
     return null;
   }
@@ -128,11 +133,56 @@ class _AddMachinePageState extends State<AddMachinePage> {
     if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
+
+    // 一次装一台：先查号码名下待装申请，0 条提示、1 条直接装、多条让业务员选一条
+    final phone = _phoneCtrl.text.trim();
+    setState(() => _submitting = true);
+    PendingInstallPreview preview;
+    try {
+      preview = await _api.pendingAppliesByPhone(phone);
+    } on ApiException catch (e) {
+      if (mounted) showToast(context, e.displayMessage);
+      return;
+    } catch (_) {
+      // 解析/类型类异常：给可读提示，别让按钮卡在「提交中」
+      if (mounted) showToast(context, '查询待装申请失败，请重试');
+      return;
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+    if (!mounted) return;
+
+    if (!preview.found || preview.items.isEmpty) {
+      showToast(
+        context,
+        preview.message.isNotEmpty
+            ? preview.message
+            : '该手机号没有待处理的装机申请，请先提交申请或核对号码',
+      );
+      return;
+    }
+
+    var target = preview.items.first;
+    if (preview.items.length > 1) {
+      final picked = await _showApplyPicker(preview.items);
+      if (picked == null) return;
+      target = picked;
+    }
+    if (!mounted) return;
+
+    // 记录已带机号而输入框空着时回填，避免装机时与申请记录对不上
+    final savedNo = target.machineNo?.trim() ?? '';
+    if (_snCtrl.text.trim().isEmpty && savedNo.isNotEmpty) {
+      _snCtrl.text = savedNo;
+      _snCtrl.selection = TextSelection.collapsed(offset: savedNo.length);
+    }
+
     setState(() => _submitting = true);
     try {
-      final result = await _api.addMachine(
+      final result = await _api.installApply(
+        applyId: target.applyId,
         machineNo: _snCtrl.text.trim(),
-        customerPhone: _phoneCtrl.text.trim(),
+        installMode: _installMode,
         brandId: _brandId,
         typeId: _typeId,
         trafficFeeRemark: _trafficFeeCtrl.text.trim(),
@@ -140,10 +190,13 @@ class _AddMachinePageState extends State<AddMachinePage> {
         remark: _remarkCtrl.text.trim(),
       );
       if (!mounted) return;
-      showToast(
-        context,
-        result.bound ? '添加成功，机号已绑定到该客户' : '添加成功，机号暂未对上客户，等待后台处理',
-      );
+      // 回显的申请单必须就是刚选的那台：对不上说明机号已被别的机器/申请占用，
+      // 这一单并没有落库（没有安装人、没有机号），不能提示成功
+      if (result.applyId != target.applyId) {
+        showToast(context, '该机号已被其他机器占用，本次装机未生效，请换一个机号重试');
+        return;
+      }
+      showToast(context, '装机成功，机号 ${result.machineNo} 已加入「我的机器」');
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
       if (mounted) showToast(context, e.displayMessage);
@@ -152,13 +205,93 @@ class _AddMachinePageState extends State<AddMachinePage> {
     }
   }
 
+  /// 多台待装时选一条申请记录（返回 null = 取消，本次不装）
+  Future<PendingInstallApply?> _showApplyPicker(List<PendingInstallApply> items) {
+    return showModalBottomSheet<PendingInstallApply>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(ctx).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.list_alt, size: 18, color: kqwPrimary),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        '该号码有 ${items.length} 台待装机器，选一台开始装机',
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, i) {
+                    final a = items[i];
+                    return ListTile(
+                      onTap: () => Navigator.of(ctx).pop(a),
+                      leading: const Icon(Icons.point_of_sale,
+                          size: 20, color: kqwPrimary),
+                      title: Text(
+                        a.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        [
+                          a.phone,
+                          if (a.sourceName.isNotEmpty) a.sourceName,
+                          if (a.brandName != null) a.brandName!,
+                          if (a.typeName != null) a.typeName!,
+                          if ((a.machineNo ?? '').isNotEmpty)
+                            '机号 ${a.machineNo}',
+                          if (a.submittedAt != null)
+                            '提交 ${formatShortTime(a.submittedAt)}',
+                        ].join(' · '),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.chevron_right, size: 18),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        title: const Text('新增机器'),
+        title: const Text('安装 POS 机'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: '关闭',
@@ -171,71 +304,40 @@ class _AddMachinePageState extends State<AddMachinePage> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
             children: [
-              _labeled(
-                '机器号',
-                required: true,
-                child: TextFormField(
-                  controller: _snCtrl,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z_-]')),
-                    LengthLimitingTextInputFormatter(64),
-                  ],
-                  validator: _validateSn,
-                  decoration: InputDecoration(
-                    hintText: '请输入机器序列号',
-                    isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    border: _border(),
-                    enabledBorder: _border(),
-                    focusedBorder: _focusedBorder(),
-                    suffixIcon: IconButton(
-                      icon: const Icon(Icons.qr_code_scanner,
-                          size: 20, color: Color(0xFF8A93A6)),
-                      tooltip: '扫码录入',
-                      onPressed: _scanToFillSn,
-                    ),
+              InstallFormFields(
+                snController: _snCtrl,
+                trafficFeeController: _trafficFeeCtrl,
+                remarkController: _remarkCtrl,
+                installMode: _installMode,
+                onInstallModeChanged: (v) => setState(() => _installMode = v),
+                brands: _brands,
+                types: _types,
+                brandId: _brandId,
+                typeId: _typeId,
+                onBrandChanged: (v) => setState(() => _brandId = v),
+                onTypeChanged: (v) => setState(() => _typeId = v),
+                bootDate: _bootDate,
+                onPickBootDate: _pickBootDate,
+                optionsLoading: _optionsLoading,
+                optionsError: _optionsError,
+                onRetryOptions: _loadOptions,
+                snValidator: _validateSn,
+                onScanSn: _scanToFillSn,
+                // 手机号是装机页独有的「按号码查待装申请」入口，弹窗按 applyId 装机不需要
+                phoneField: installField(
+                  '客户手机号',
+                  required: true,
+                  child: TextFormField(
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(11),
+                    ],
+                    validator: _validatePhone,
+                    decoration: installInputDecoration('申请时填写的使用人手机号'),
                   ),
-                ),
-              ),
-              _labeled(
-                '客户手机号',
-                required: true,
-                child: TextFormField(
-                  controller: _phoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(11),
-                  ],
-                  validator: _validatePhone,
-                  decoration: _inputDecoration('请输入客户手机号'),
-                ),
-              ),
-              _labeled('品牌', child: _brandField()),
-              _labeled('类型', child: _typeField()),
-              _labeled(
-                '流量费备注',
-                child: TextFormField(
-                  controller: _trafficFeeCtrl,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                  decoration: _inputDecoration('如：流量费孔出、月租 5 元'),
-                ),
-              ),
-              _labeled(
-                '开机时间',
-                child: _dateField(),
-              ),
-              _labeled(
-                '备注',
-                child: TextFormField(
-                  controller: _remarkCtrl,
-                  maxLines: 3,
-                  inputFormatters: [LengthLimitingTextInputFormatter(100)],
-                  decoration: _inputDecoration('其他备注'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -267,176 +369,4 @@ class _AddMachinePageState extends State<AddMachinePage> {
     );
   }
 
-  // ---------- 品牌 / 类型下拉 ----------
-
-  Widget _brandField() {
-    if (_optionsLoading) return _optionPlaceholder('品牌加载中…');
-    if (_optionsError != null) return _optionFailed();
-    return DropdownButtonFormField<String>(
-      initialValue: _brandId,
-      isExpanded: true,
-      decoration: _dropdownDecoration(_brands.isEmpty ? '暂无可选品牌' : '请选择品牌'),
-      items: [
-        for (final brand in _brands)
-          DropdownMenuItem(value: brand.id, child: Text(brand.name)),
-      ],
-      onChanged: (v) => setState(() => _brandId = v),
-    );
-  }
-
-  Widget _typeField() {
-    if (_optionsLoading) return _optionPlaceholder('类型加载中…');
-    if (_optionsError != null) return _optionFailed();
-    return DropdownButtonFormField<String>(
-      initialValue: _typeId,
-      isExpanded: true,
-      decoration: _dropdownDecoration(_types.isEmpty ? '暂无可选类型' : '请选择类型'),
-      items: [
-        for (final type in _types)
-          DropdownMenuItem(value: type.id, child: Text(type.name)),
-      ],
-      onChanged: (v) => setState(() => _typeId = v),
-    );
-  }
-
-  Widget _optionPlaceholder(String text) => Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFDDE2EA)),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(
-                width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
-            const SizedBox(width: 8),
-            Text(text,
-                style: const TextStyle(fontSize: 14, color: Color(0xFF9AA3B2))),
-          ],
-        ),
-      );
-
-  /// 字典加载失败：点一下重试（不打断已填写的机器号 / 手机号）
-  Widget _optionFailed() => InkWell(
-        onTap: _loadOptions,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 46,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFDDE2EA)),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  _optionsError ?? '选项加载失败，点击重试',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(fontSize: 14, color: Color(0xFF9AA3B2)),
-                ),
-              ),
-              const Icon(Icons.refresh, size: 18, color: Color(0xFF8A93A6)),
-            ],
-          ),
-        ),
-      );
-
-  // ---------- 字段容器与样式 ----------
-
-  /// 标签在上、输入框在下的登录风格，与截图一致；[required] 时标签前加红星
-  Widget _labeled(String label, {required Widget child, bool required = false}) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (required)
-                const Text('*',
-                    style: TextStyle(fontSize: 13, color: Color(0xFFE53935))),
-              if (required) const SizedBox(width: 2),
-              Text(label,
-                  style: const TextStyle(
-                      fontSize: 13, color: Color(0xFF4A5160))),
-            ],
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
-    );
-  }
-
-  Widget _dateField() {
-    final text = _bootDate == null
-        ? '选择开机日期'
-        : '${_bootDate!.year}-${_two(_bootDate!.month)}-${_two(_bootDate!.day)}';
-    return InkWell(
-      onTap: _pickBootDate,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        height: 46,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFDDE2EA)),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                text,
-                style: TextStyle(
-                    fontSize: 14,
-                    color: _bootDate == null
-                        ? const Color(0xFF9AA3B2)
-                        : const Color(0xFF1F2430)),
-              ),
-            ),
-            const Icon(Icons.calendar_today_outlined,
-                size: 18, color: Color(0xFF8A93A6)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  OutlineInputBorder _border() => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFDDE2EA)),
-      );
-
-  OutlineInputBorder _focusedBorder() => OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF2E7BFF), width: 1.4),
-      );
-
-  InputDecoration _inputDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        border: _border(),
-        enabledBorder: _border(),
-        focusedBorder: _focusedBorder(),
-      );
-
-  InputDecoration _dropdownDecoration(String hint) => InputDecoration(
-        hintText: hint,
-        isDense: true,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        border: _border(),
-        enabledBorder: _border(),
-        focusedBorder: _focusedBorder(),
-        suffixIcon: const Icon(Icons.keyboard_arrow_down,
-            size: 20, color: Color(0xFF8A93A6)),
-      );
-
-  static String _two(int v) => v.toString().padLeft(2, '0');
 }

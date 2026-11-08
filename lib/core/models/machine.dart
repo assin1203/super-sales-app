@@ -26,6 +26,7 @@ class MachineProgress {
     required this.amount,
     required this.target,
     required this.daysLeft,
+    this.expired = false,
     this.submittedAt,
     this.reviewedAt,
   });
@@ -39,6 +40,9 @@ class MachineProgress {
   /// 剩余天数
   final int daysLeft;
 
+  /// 任务窗口是否已过期（后端判定；未挂任务窗口的历史机器恒为 false）
+  final bool expired;
+
   final DateTime? submittedAt;
   final DateTime? reviewedAt;
 
@@ -47,6 +51,7 @@ class MachineProgress {
         amount: '${json['amount'] ?? '0'}',
         target: '${json['target'] ?? '0'}',
         daysLeft: (json['daysLeft'] as num?)?.toInt() ?? 0,
+        expired: json['expired'] == true,
         submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
         reviewedAt: DateTime.tryParse('${json['reviewedAt'] ?? ''}'),
       );
@@ -68,6 +73,7 @@ class Machine {
     required this.progress,
     this.bootedAt,
     this.referredBy,
+    this.newbieRejectReason,
   });
 
   final String sn;
@@ -80,9 +86,13 @@ class Machine {
   final String newbieStatusName;
   final MachineProgress progress;
 
+  /// 新手任务最近一次驳回原因（仅驳回后、重新提交前有值）
+  final String? newbieRejectReason;
+
   factory Machine.fromJson(Map<String, dynamic> json) {
     final rawProgress = json['progress'];
     final rawReferrer = json['referredBy'];
+    final rawReason = (json['newbieRejectReason'] as String?)?.trim() ?? '';
     return Machine(
       sn: json['sn'] as String? ?? '',
       model: json['model'] as String? ?? '',
@@ -92,11 +102,29 @@ class Machine {
           : null,
       newbieStatus: (json['newbieStatus'] as num?)?.toInt() ?? 0,
       newbieStatusName: json['newbieStatusName'] as String? ?? '',
+      newbieRejectReason: rawReason.isEmpty ? null : rawReason,
       progress: rawProgress is Map
           ? MachineProgress.fromJson(rawProgress.cast<String, dynamic>())
           : const MachineProgress(amount: '0', target: '0', daysLeft: 0),
     );
   }
+
+  /// 提交达标后本地更新状态，避免整页重拉
+  Machine copyWith({
+    int? newbieStatus,
+    String? newbieStatusName,
+    bool clearRejectReason = false,
+  }) =>
+      Machine(
+        sn: sn,
+        model: model,
+        bootedAt: bootedAt,
+        referredBy: referredBy,
+        newbieStatus: newbieStatus ?? this.newbieStatus,
+        newbieStatusName: newbieStatusName ?? this.newbieStatusName,
+        newbieRejectReason: clearRejectReason ? null : newbieRejectReason,
+        progress: progress,
+      );
 
   bool get finished => newbieStatus == 3;
 }
@@ -250,10 +278,37 @@ class MachineAddResult {
   bool get bound => customerUserId != null;
 }
 
-/// 申请中的机器（`GET /pos/machines` 的 `applies` 字段，`pos_apply` source=2）。
+/// 新手任务达标提交结果（`POST /pos/newbie/submit`）。
 ///
-/// 同一用户/同一客户手机号可以提交多台：这里只给还没落到 `pos_task`
-/// 的机号，装机完成后正式记录走 [Machine] 列表。
+/// 提交成功后后端即置「审核中」（[newbieStatus] 为 2），等人工审核发放奖励。
+class NewbieSubmitResult {
+  const NewbieSubmitResult({
+    required this.sn,
+    required this.newbieStatus,
+    required this.newbieStatusName,
+    this.submittedAt,
+  });
+
+  final String sn;
+  final int newbieStatus;
+  final String newbieStatusName;
+  final DateTime? submittedAt;
+
+  factory NewbieSubmitResult.fromJson(Map<String, dynamic> json) =>
+      NewbieSubmitResult(
+        sn: json['sn'] as String? ?? '',
+        newbieStatus: (json['newbieStatus'] as num?)?.toInt() ?? 2,
+        newbieStatusName: json['newbieStatusName'] as String? ?? '审核中',
+        submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+      );
+}
+
+/// 我的装机申请（`GET /pos/applies`）。
+///
+/// 申请单视角：联系人 [contactName]、联系电话 [customerPhone]（后端已脱敏）、
+/// 商户名称 [merchantName]、使用人 [useType]；
+/// 同时兼容机器视角字段（[machineNo] / [brandName] / [typeName]）。
+/// 审核通过（[approved]）后走 `POST /pos/applies/{id}/install` 装机。
 class MachineApply {
   const MachineApply({
     required this.applyId,
@@ -261,6 +316,16 @@ class MachineApply {
     required this.customerPhone,
     required this.status,
     required this.statusName,
+    this.contactName,
+    this.merchantName,
+    this.useType = 1,
+    this.brandId,
+    this.typeId,
+    this.region,
+    this.address,
+    this.remark,
+    this.trafficFeeRemark,
+    this.bootTime,
     this.brandName,
     this.typeName,
     this.customerUserId,
@@ -270,8 +335,30 @@ class MachineApply {
   final String applyId;
   final String machineNo;
 
-  /// 客户手机号（后端已脱敏）
+  /// 申请联系电话（后端已脱敏）
   final String customerPhone;
+
+  /// 联系人
+  final String? contactName;
+
+  /// 商户名称
+  final String? merchantName;
+
+  /// 使用人：1 自己使用 / 2 他人使用
+  final int useType;
+
+  /// 品牌 / 类型 ID：申请时没填的，装机接口允许补齐
+  final String? brandId;
+  final String? typeId;
+
+  /// 申请时填写的门店信息，装机时若为空可补录
+  final String? region;
+  final String? address;
+  final String? remark;
+  final String? trafficFeeRemark;
+
+  /// 开机时间（申请已填则装机可省略）
+  final DateTime? bootTime;
 
   /// 0 待处理 / 1 已通过 / 2 已拒绝
   final int status;
@@ -281,18 +368,42 @@ class MachineApply {
   final String? customerUserId;
   final DateTime? submittedAt;
 
+  /// 审核通过，可以装机
+  bool get approved => status == 1;
+
+  /// 使用人文案（1 自己使用 / 2 他人使用）
+  String get useTypeName => useType == 2 ? '他人使用' : '自己使用';
+
+  static String? _text(Object? value) {
+    if (value == null) return null;
+    final text = '$value';
+    return text.isEmpty ? null : text;
+  }
+
   factory MachineApply.fromJson(Map<String, dynamic> json) {
     final rawCustomer = json['customerUserId'];
     return MachineApply(
-      applyId: '${json['applyId'] ?? ''}',
-      machineNo: json['machineNo'] as String? ?? '',
-      customerPhone: json['customerPhone'] as String? ?? '',
+      applyId: _text(json['applyId']) ?? _text(json['id']) ?? '',
+      machineNo: _text(json['machineNo']) ?? '',
+      // 申请单视角用 phone，机器视角用 customerPhone
+      customerPhone: _text(json['customerPhone']) ?? _text(json['phone']) ?? '',
+      contactName: _text(json['contactName']),
+      merchantName: _text(json['merchantName']),
+      useType: (json['useType'] as num?)?.toInt() ?? 1,
+      brandId: _text(json['brandId']),
+      typeId: _text(json['typeId']),
+      region: _text(json['region']),
+      address: _text(json['address']),
+      remark: _text(json['remark']),
+      trafficFeeRemark: _text(json['trafficFeeRemark']),
+      bootTime: DateTime.tryParse('${json['bootTime'] ?? ''}'),
       status: (json['status'] as num?)?.toInt() ?? 0,
       statusName: json['statusName'] as String? ?? '',
-      brandName: json['brandName'] as String?,
-      typeName: json['typeName'] as String?,
-      customerUserId: rawCustomer == null ? null : '$rawCustomer',
-      submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+      brandName: _text(json['brandName']),
+      typeName: _text(json['typeName']),
+      customerUserId: _text(rawCustomer),
+      submittedAt: DateTime.tryParse(
+          '${json['submittedAt'] ?? json['createdAt'] ?? ''}'),
     );
   }
 }
@@ -317,6 +428,138 @@ class MachineList {
           ? rawApplies
               .whereType<Map>()
               .map((e) => MachineApply.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
+    );
+  }
+}
+
+/// 待装机器的一条申请（`GET /pos/applies/pending-by-phone` 的 items）。
+///
+/// 与 [MachineApply] 不同：这里只出 status=0 待处理记录，字段是装机现场要核对的
+/// 一份快照（含单号、来源、机器号），装机时用它填表并对齐到 applyId 精确绑定。
+class PendingInstallApply {
+  const PendingInstallApply({
+    required this.applyId,
+    required this.requestNo,
+    required this.phone,
+    required this.source,
+    required this.sourceName,
+    required this.useType,
+    required this.useTypeName,
+    required this.submittedAt,
+    this.contactName,
+    this.merchantName,
+    this.region,
+    this.address,
+    this.remark,
+    this.trafficFeeRemark,
+    this.bootTime,
+    this.brandName,
+    this.typeName,
+    this.machineNo,
+  });
+
+  final String applyId;
+
+  /// 申请单号（业务员可报给客户核对）
+  final String requestNo;
+
+  /// 联系电话（后端已脱敏）
+  final String phone;
+
+  /// 来源：1 装机申请 / 2 新增机器
+  final int source;
+  final String sourceName;
+
+  /// 使用人：1 自己使用 / 2 他人使用
+  final int useType;
+  final String useTypeName;
+
+  final String? contactName;
+  final String? merchantName;
+  final String? region;
+  final String? address;
+  final String? remark;
+  final String? trafficFeeRemark;
+  final DateTime? bootTime;
+  final String? brandName;
+  final String? typeName;
+
+  /// 机号（装机申请通常为空，需现场录入）
+  final String? machineNo;
+
+  final DateTime? submittedAt;
+
+  /// 选择列表的标题：门店名 → 联系人 → 单号
+  String get title {
+    for (final text in [merchantName, contactName]) {
+      if (text != null && text.trim().isNotEmpty) return text.trim();
+    }
+    return requestNo.isEmpty ? '装机申请' : '申请单 $requestNo';
+  }
+
+  static String? _text(Object? value) {
+    if (value == null) return null;
+    final text = '$value';
+    return text.isEmpty ? null : text;
+  }
+
+  factory PendingInstallApply.fromJson(Map<String, dynamic> json) =>
+      PendingInstallApply(
+        applyId: _text(json['applyId']) ?? '',
+        requestNo: _text(json['requestNo']) ?? '',
+        phone: _text(json['phone']) ?? '',
+        source: (json['source'] as num?)?.toInt() ?? 1,
+        sourceName: _text(json['sourceName']) ?? '',
+        useType: (json['useType'] as num?)?.toInt() ?? 1,
+        useTypeName: _text(json['useTypeName']) ?? '',
+        contactName: _text(json['contactName']),
+        merchantName: _text(json['merchantName']),
+        region: _text(json['region']),
+        address: _text(json['address']),
+        remark: _text(json['remark']),
+        trafficFeeRemark: _text(json['trafficFeeRemark']),
+        bootTime: DateTime.tryParse('${json['bootTime'] ?? ''}'),
+        brandName: _text(json['brandName']),
+        typeName: _text(json['typeName']),
+        machineNo: _text(json['machineNo']),
+        submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+      );
+}
+
+/// 按手机号查待装申请的结果（`GET /pos/applies/pending-by-phone`）。
+///
+/// 查不到不是错误：[found] 为 false 时用 [message] 做提示，不用当异常处理。
+/// [items] 先申请的在前，与按号码直接装机选择的那台一致。
+class PendingInstallPreview {
+  const PendingInstallPreview({
+    required this.found,
+    required this.phone,
+    required this.total,
+    required this.message,
+    this.items = const [],
+  });
+
+  final bool found;
+
+  /// 查询用的手机号（后端已脱敏）
+  final String phone;
+  final int total;
+  final String message;
+  final List<PendingInstallApply> items;
+
+  factory PendingInstallPreview.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'];
+    return PendingInstallPreview(
+      found: json['found'] == true,
+      phone: '${json['phone'] ?? ''}',
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      message: json['message'] as String? ?? '',
+      items: raw is List
+          ? raw
+              .whereType<Map>()
+              .map((e) => PendingInstallApply.fromJson(e.cast<String, dynamic>()))
               .toList()
           : const [],
     );

@@ -2,11 +2,11 @@ import 'package:dio/dio.dart';
 
 /// 后端地址。
 ///
-/// 真机调试默认走开发机的局域网 IP；换网络时用
+/// 默认指向生产环境（网关前缀 `/appApi`）；本地联调时用
 /// `flutter run --dart-define=API_BASE_URL=http://<ip>:3000` 覆盖。
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'http://192.168.1.39:3000',
+  defaultValue: 'https://pos.citykafei.com/appApi',
 );
 
 /// 后端业务错误。

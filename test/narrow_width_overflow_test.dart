@@ -103,6 +103,7 @@ void main() {
     '/profile',
     '/machines',
     '/machine/add',
+    '/machine/apply',
     '/room/1',
   ];
 

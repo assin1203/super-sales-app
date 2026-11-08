@@ -66,10 +66,11 @@ Future<void> _pumpUntilLoaded(WidgetTester tester) async {
 
 /// 入口页：触发入房流程，并把返回值写到屏上便于断言。
 class _Launcher extends StatefulWidget {
-  const _Launcher({required this.api, this.balance});
+  const _Launcher({required this.api, this.balance, this.pkg = _pkg});
 
   final TeamApi api;
   final int? balance;
+  final RoomPackage pkg;
 
   @override
   State<_Launcher> createState() => _LauncherState();
@@ -87,7 +88,7 @@ class _LauncherState extends State<_Launcher> {
             onPressed: () async {
               final r = await enterRoomFlow(
                 context,
-                pkg: _pkg,
+                pkg: widget.pkg,
                 balance: widget.balance,
                 api: widget.api,
               );
@@ -102,19 +103,26 @@ class _LauncherState extends State<_Launcher> {
   }
 }
 
-Widget _app(_FakeAdapter adapter, {int? balance}) {
+Widget _app(_FakeAdapter adapter, {int? balance, RoomPackage pkg = _pkg}) {
   final router = GoRouter(
     routes: [
       GoRoute(
         path: '/',
-        builder: (_, __) =>
-            _Launcher(api: TeamApi(client: _client(adapter)), balance: balance),
+        builder: (_, __) => _Launcher(
+          api: TeamApi(client: _client(adapter)),
+          balance: balance,
+          pkg: pkg,
+        ),
       ),
       GoRoute(
         path: '/room/:id',
         builder: (_, state) => Scaffold(
           body: Text('房间详情 ${state.pathParameters['id']}'),
         ),
+      ),
+      GoRoute(
+        path: '/points',
+        builder: (_, __) => const Scaffold(body: Text('积分中心')),
       ),
     ],
   );
@@ -158,7 +166,7 @@ void main() {
     expect(find.text('result=9'), findsNothing); // 已经离开入口页
   });
 
-  testWidgets('余额不足只软提示，仍然可以进入', (tester) async {
+  testWidgets('积分不足时不发请求，只引导去积分中心', (tester) async {
     final adapter = _FakeAdapter(
       (options) => _json({
         'roomId': 7,
@@ -173,15 +181,52 @@ void main() {
     await tester.tap(find.text('去入房'));
     await tester.pumpAndSettle();
 
-    expect(find.text('积分可能不足'), findsOneWidget);
+    expect(find.text('积分不足'), findsOneWidget);
     expect(find.textContaining('还差 189 积分'), findsOneWidget);
+    // 不再提供「仍然进入」这种放行入口
+    expect(find.text('确认进入'), findsNothing);
+    expect(find.text('仍然进入'), findsNothing);
 
-    await tester.tap(find.text('仍然进入'));
+    await tester.tap(find.text('去获取积分'));
+    await tester.pumpAndSettle();
+
+    expect(adapter.enterRequests, isEmpty);
+    expect(find.text('积分中心'), findsOneWidget);
+  });
+
+  testWidgets('已购档位礼包的用户积分不足也能进入', (tester) async {
+    final adapter = _FakeAdapter(
+      (options) => _json({
+        'roomId': 6,
+        'posNo': 2,
+        'packageId': '2',
+        'entryPoints': 0,
+        'purchased': false,
+      }),
+    );
+    await tester.pumpWidget(_app(
+      adapter,
+      balance: 0,
+      pkg: const RoomPackage(
+        id: '2',
+        code: 'GOLD',
+        name: '金牌房',
+        entryPoints: 199,
+        purchased: true,
+      ),
+    ));
+
+    await tester.tap(find.text('去入房'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('已购买'), findsOneWidget);
+    expect(find.text('确认进入'), findsOneWidget);
+    await tester.tap(find.text('确认进入'));
     await _pumpUntilLoaded(tester);
     await tester.pumpAndSettle();
 
     expect(adapter.enterRequests, hasLength(1));
-    expect(find.text('房间详情 7'), findsOneWidget);
+    expect(find.text('房间详情 6'), findsOneWidget);
   });
 
   testWidgets('接口失败提示后端文案，弹窗不关闭也不跳转', (tester) async {

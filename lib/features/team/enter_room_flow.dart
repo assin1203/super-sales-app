@@ -12,10 +12,11 @@ import '../../core/toast.dart';
 /// → 成功提示并跳房间详情。
 ///
 /// 积分口径全部在后端：首次入房才买礼包扣 `entryPoints`，买过（终身一次）后
-/// 进房不再扣费。所以 [balance] 不足只做软提示、不拦截 —— 前端拿不到
-/// 「已购档位」状态，硬拦会挡住已付费用户的正常入房。
+/// 进房不再扣费。所以可用积分不足且未购该档位时**直接拦截**，引导用户先
+/// 去积分中心获取积分；已购档位（[RoomPackage.purchased]）放行，余额未知
+/// （接口失败）也不拦，交给后端判定。
 ///
-/// 返回入房回执；用户取消或接口失败返回 null。
+/// 返回入房回执；用户取消、积分不足或接口失败返回 null。
 Future<EnterRoomResult?> enterRoomFlow(
   BuildContext context, {
   required RoomPackage pkg,
@@ -23,7 +24,7 @@ Future<EnterRoomResult?> enterRoomFlow(
   TeamApi? api,
 }) async {
   final client = api ?? teamApi;
-  final result = await showDialog<EnterRoomResult>(
+  final result = await showDialog<Object>(
     context: context,
     builder: (dialogContext) => _EnterRoomDialog(
       pkg: pkg,
@@ -31,10 +32,20 @@ Future<EnterRoomResult?> enterRoomFlow(
       api: client,
     ),
   );
-  if (result == null || !context.mounted) return null;
+  if (!context.mounted) return null;
+  if (result is _NeedPoints) {
+    context.push('/points');
+    return null;
+  }
+  if (result is! EnterRoomResult) return null;
   showToast(context, result.summary);
   context.push('/room/${result.roomId}');
   return result;
+}
+
+/// 弹窗回执哨兵：积分不足，交给外层引导去积分中心。
+class _NeedPoints {
+  const _NeedPoints();
 }
 
 class _EnterRoomDialog extends StatefulWidget {
@@ -57,8 +68,13 @@ class _EnterRoomDialog extends StatefulWidget {
 class _EnterRoomDialogState extends State<_EnterRoomDialog> {
   bool _submitting = false;
 
-  bool get _maybeLack =>
-      widget.balance != null && widget.balance! < widget.pkg.entryPoints;
+  /// 积分不足且没买过该档位礼包：直接拦下，不允许进入
+  bool get _blocked {
+    if (widget.pkg.purchased) return false;
+    final balance = widget.balance;
+    if (balance == null) return false; // 余额未知，交后端判定
+    return balance < widget.pkg.entryPoints;
+  }
 
   Future<void> _submit() async {
     if (_submitting) return;
@@ -81,37 +97,52 @@ class _EnterRoomDialogState extends State<_EnterRoomDialog> {
     final balance = widget.balance;
     final lack = balance == null ? 0 : pkg.entryPoints - balance;
     return AlertDialog(
-      title: Text(_maybeLack ? '积分可能不足' : '进入房间'),
-      content: Text(
-        _maybeLack
-            ? '「${pkg.name}」档位入房需 ${pkg.entryPoints} 积分，'
-                '当前可用积分 $balance，还差 $lack 积分。\n'
-                '若您已购买过该档位礼包，本次进房不再扣积分，可以直接进入。'
-            : '「${pkg.name}」档位入房需消耗 ${pkg.entryPoints} 积分；'
-                '首次进入会购买该档位礼包（终身一次），之后进房不再扣积分。'
-                '${balance != null ? '\n当前可用积分：$balance。' : ''}',
-      ),
+      title: Text(_blocked ? '积分不足' : '进入房间'),
+      content: Text(_content(pkg, balance, lack)),
       actions: [
         TextButton(
           onPressed: _submitting ? null : () => Navigator.pop(context),
           child: const Text('取消'),
         ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: _submitting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                )
-              : Text(_maybeLack ? '仍然进入' : '确认进入',
-                  style: const TextStyle(color: Colors.white)),
-        ),
+        if (_blocked)
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(context).pop(const _NeedPoints()),
+            child: const Text('去获取积分',
+                style: TextStyle(color: Colors.white)),
+          )
+        else
+          FilledButton(
+            onPressed: _submitting ? null : _submit,
+            child: _submitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Text('确认进入',
+                    style: TextStyle(color: Colors.white)),
+          ),
       ],
     );
+  }
+
+  String _content(RoomPackage pkg, int? balance, int lack) {
+    if (_blocked) {
+      return '「${pkg.name}」档位入房需 ${pkg.entryPoints} 积分，'
+          '当前可用积分 $balance，还差 $lack 积分。\n'
+          '请先到积分中心获取积分后再进入房间。';
+    }
+    if (pkg.purchased) {
+      return '您已购买「${pkg.name}」档位礼包，本次进房不再扣积分。'
+          '${balance != null ? '\n当前可用积分：$balance。' : ''}';
+    }
+    return '「${pkg.name}」档位入房需消耗 ${pkg.entryPoints} 积分；'
+        '首次进入会购买该档位礼包（终身一次），之后进房不再扣积分。'
+        '${balance != null ? '\n当前可用积分：$balance。' : ''}';
   }
 }
 

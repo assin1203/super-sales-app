@@ -69,14 +69,37 @@ void main() {
     expect(find.text('复制推广链接'), findsOneWidget);
   });
 
-  testWidgets('我的机器页渲染（页面骨架 + 添加按钮）', (tester) async {
+  testWidgets('登录后首页展示申请 POS 机入口', (tester) async {
+    await pumpLoggedInApp(tester);
+    expect(find.text('申请 POS 机'), findsOneWidget);
+    expect(find.text('立即申请'), findsOneWidget);
+
+    // 点入口进申请表单页
+    await tester.tap(find.text('立即申请'));
+    await tester.pumpAndSettle();
+    expect(find.text('联系人'), findsOneWidget);
+    // 使用人标记：自己用 / 他人用
+    expect(find.text('自己使用'), findsOneWidget);
+    expect(find.text('他人使用'), findsOneWidget);
+    await tester.tap(find.text('他人使用'));
+    await tester.pumpAndSettle();
+    expect(find.text('他人使用'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('提交申请'), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('提交申请'), findsOneWidget);
+  });
+
+  testWidgets('我的机器页渲染（页面骨架，无添加按钮）', (tester) async {
     await pumpLoggedInApp(tester);
     final ctx = tester.element(find.byType(HomeTab));
     GoRouter.of(ctx).push('/machines');
     await tester.pumpAndSettle();
     expect(find.text('我的机器'), findsWidgets);
     // 机器数据来自 GET /pos/machines（测试环境请求失败），
-    // 只校验页架与添加入口，具体机器由后端返回。
-    expect(find.text('添加新机器'), findsOneWidget);
+    // 只校验页架；申请入口已收敛到首页，本页不再有悬浮添加按钮。
+    expect(find.text('已提交'), findsOneWidget);
+    expect(find.text('已安装'), findsOneWidget);
+    expect(find.text('添加新机器'), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
   });
 }

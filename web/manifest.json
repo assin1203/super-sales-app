@@ -1,6 +1,6 @@
 {
-    "name": "kqw_app",
-    "short_name": "kqw_app",
+    "name": "超级展业",
+    "short_name": "超级展业",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#E53935",

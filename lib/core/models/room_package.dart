@@ -12,6 +12,7 @@ class RoomPackage {
     this.dividendPercent = 0,
     this.sort = 0,
     this.isDefault = false,
+    this.purchased = false,
   });
 
   final String id;
@@ -29,6 +30,12 @@ class RoomPackage {
   /// 默认档（列表首项）
   final bool isDefault;
 
+  /// 当前用户是否已购买过该档位礼包（终身一次，依据后端 user_room_package）。
+  ///
+  /// 后端 `GET /team/room-packages` 已返回该字段（按 token 里的用户计算）；
+  /// 已购用户进房不再扣积分，前端据此放行积分不足的情况，并显示「已完成升级」。
+  final bool purchased;
+
   factory RoomPackage.fromJson(Map<String, dynamic> json) => RoomPackage(
         id: '${json['id'] ?? ''}',
         code: json['code'] as String? ?? '',
@@ -38,5 +45,6 @@ class RoomPackage {
         dividendPercent: (json['dividendPercent'] as num?)?.toInt() ?? 0,
         sort: (json['sort'] as num?)?.toInt() ?? 0,
         isDefault: json['isDefault'] as bool? ?? false,
+        purchased: json['purchased'] as bool? ?? false,
       );
 }

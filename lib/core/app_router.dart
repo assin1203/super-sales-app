@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../features/home/home_tab.dart';
@@ -7,6 +8,7 @@ import '../features/task/task_tab.dart';
 import '../features/team/team_tab.dart';
 import '../pages/add_machine_page.dart';
 import '../pages/addresses_page.dart';
+import '../pages/apply_machine_page.dart';
 import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
 import '../pages/orders_page.dart';
@@ -22,8 +24,12 @@ import 'auth_provider.dart';
 import 'shell_layout.dart';
 
 /// 路由表：未登录 → /login；登录后进入底部导航壳
-GoRouter appRouter(AuthProvider auth) {
+///
+/// [navigatorKey] 供启动时的「发现新版本」弹窗使用：main.dart 拿它的 context
+/// 才能在任何页面（含登录页）之上弹出对话框。
+GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey}) {
   return GoRouter(
+    navigatorKey: navigatorKey,
     initialLocation: auth.loggedIn ? '/' : '/login',
     refreshListenable: auth,
     routes: [
@@ -53,6 +59,9 @@ GoRouter appRouter(AuthProvider auth) {
       GoRoute(path: '/profile', builder: (c, s) => const ProfilePage()),
       GoRoute(path: '/machines', builder: (c, s) => const MachinesPage()),
       GoRoute(path: '/machine/add', builder: (c, s) => const AddMachinePage()),
+      GoRoute(
+          path: '/machine/apply',
+          builder: (c, s) => const ApplyMachinePage()),
       GoRoute(path: '/packages', builder: (c, s) => const PackagesPage()),
       GoRoute(path: '/password', builder: (c, s) => const PasswordPage()),
       GoRoute(

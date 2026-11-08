@@ -37,7 +37,13 @@
 | 订单 | `POST /mall/orders/{id}/confirm` | `mall_api.dart#confirm` | `orders_page.dart` 确认收货 |
 | 地址 | `GET/POST /user/addresses`、`PUT/DELETE /user/addresses/{id}`、`POST /user/addresses/{id}/default` | `address_api.dart` | `addresses_page.dart` |
 | 机器 | `GET /pos/machines`、`GET /pos/machines/{sn}` | `pos_api.dart` | `machines_page.dart`、首页达标卡 |
-| 机器 | `POST /pos/apply`、`POST /pos/newbie/submit` | `pos_api.dart` | `machines_page.dart` 申请与新手机器提交 |
+| 机器 | `POST /pos/apply`（`proofImages` 装机凭证截图 URL 数组 ≤4 张，选填，先调 `POST /common/upload/image`；说明见 `install_guide_page.dart`）、`POST /pos/newbie/submit` | `pos_api.dart` | `apply_machine_page.dart` 装机申请（首页入口，凭证截图区在申请信息下方）、`machines_page.dart` 新手机器提交 |
+| 机器 | `GET /pos/applies`（`status`/`source` 筛选） | `pos_api.dart#applies` | `machines_page.dart`「已提交」列表 |
+| 机器 | `POST /pos/applies/{id}/install`（`installMode` 1 平台安装 / 2 用户自装；补录 `bootTime`/`contactName`/`merchantName`/`region`/`address`/`remark`/`trafficFeeRemark`；后端 `proofImages` 字段保留，App 不再上传） | `pos_api.dart#installApply` | `machines_page.dart` 已通过申请「立即装机」 |
+| 机器 | `POST /pos/applies/install`（按手机号装机，`phone` 必填，`installMode`/`machineNo`/品牌类型/补录字段可选） | `pos_api.dart#installApplyByPhone` | `add_machine_page.dart`「安装 POS 机」（装机页无凭证区） |
+| 机器 | `POST /common/upload/image`（multipart 字段 `file`，jpg/png/gif/webp ≤5MB，返回 `{url,key,size}`） | `api_client.dart#uploadImage` | 申请凭证截图、头像上传 |
+| 机器 | `POST /pos/machines`（`MachineCreateDto`，直接建机） | `pos_api.dart#addMachine` | 已无页面调用，装机统一走 `/pos/applies/install` |
+| 机器 | `GET /pos/applies/by-phone`（按手机号查申请） | 未接入 | 客服/帮客户装机场景备用 |
 | 任务 | `GET /tasks`、`GET /tasks/{code}`、`POST /tasks/{code}/claim` | `task_api.dart` | `task_tab.dart`、首页任务卡 |
 | 团队 | `GET /team/rooms`、`GET /team/rooms/{id}`、`GET /team/rooms/{id}/members` | `team_api.dart` | `team_tab.dart`、`room_detail_page.dart` |
 | 团队 | `GET /team/wait-queue` | `team_api.dart#waitQueue` | `team_tab.dart` 候补队列 |
@@ -45,11 +51,54 @@
 | 支付 | `POST /payment/order`、`GET /payment/order/{id}` | `payment_api.dart` | 已封装，收银台待接 SDK |
 | 公共 | `POST /common/upload/image` | `api_client.dart#uploadImage` | `profile_page.dart` 头像 |
 | 公共 | `POST /common/sms/send`、`POST /common/sms/verify` | `common_api.dart` | 已封装，登录走本地滑块验证码 |
+| 公共 | `GET /common/app/version`（公开端点） | `app_version_api.dart#latest` | `app_update.dart` 冷启动 + 「我的 → 检查更新」 |
+
+## App 更新检查（`GET /common/app/version`）
+
+已上线（后端 `super-sales-server/docs/api/app-version.md` 是契约与发版流程的事实源）。
+公开端点，冷启动时用户可能未登录，**不要**要求 Authorization；接口 404 / 超时 / 断网时
+App 静默放行——更新提示永远不能把用户卡在门外。
+
+请求：`GET /common/app/version?platform=android&versionCode=1`
+
+响应（裸数据，按平台各存一条最新版本记录即可）：
+
+```json
+{
+  "versionName": "0.2.0",
+  "versionCode": 2,
+  "downloadUrl": "https://pos.citykafei.com/download/kqw-0.2.0.apk",
+  "releaseNotes": "修复装机提交偶发失败\n优化扫码识别",
+  "forceUpdate": false,
+  "minSupportedVersionCode": 1
+}
+```
+
+| 字段 | 必填 | 说明 |
+| --- | --- | --- |
+| `versionName` | 是 | 展示用版本名 |
+| `versionCode` | 是 | 整数版本号，**前端只按它比较**；与 `pubspec.yaml` 的 `+N` 一致 |
+| `downloadUrl` | 否 | APK 直链；为空时 App 提示「下载地址暂不可用」 |
+| `releaseNotes` | 否 | 更新说明，纯文本 |
+| `forceUpdate` | 否 | true = 旧包必须更新（弹窗不可关闭） |
+| `minSupportedVersionCode` | 否 | 低于它的安装包一律强更，用于紧急封禁极老版本 |
+
+前端行为（`lib/core/app_update.dart`）：
+
+- 冷启动首帧后异步检查，与登录态无关；`versionCode` 不高于本地 → 不打扰。
+- 强更：无「稍后再说」、点遮罩和返回键都关不掉；弱更：可稍后。
+- 任何请求失败（404/断网/超时）→ 静默放行，绝不把用户挡在启动页外。
+- 「我的 → 检查更新」为手动入口，失败/已是最新都会给一句提示。
+
+发版约定：**每次发布必须递增 `pubspec.yaml` 的 `version: x.y.z+N`**，并同步后端记录
+（`+N` → Android versionCode）。release 包已固定使用正式 keystore 签名
+（`android/key.properties` + `android/app/kqw-release.jks`，两者均被 gitignore）：
+这套密钥必须离线备份，丢失后已安装用户无法覆盖升级、只能卸载重装，泄露则可被签出冒名安装包。
 
 ## 检查结论
 
 - `flutter analyze`：**0 error / 0 warning**，剩 5 条 `dangling_library_doc_comments`（仅注释风格）。
-- `flutter test`：**18 项全部通过**（含窄屏 360dp 全页面无溢出、首页/商城/推广/机器渲染）。
+- `flutter test`：**77 项全部通过**（含窄屏 360dp 全页面无溢出、首页/商城/推广/机器渲染、版本更新提示 10 项）。
 - 登录态：access（JWT，aud=app）+ refresh（opaque，Redis 轮换）双 token；401 自动刷新重放，刷新失败才登出。
 - 未接能力均在代码中显式提示而非伪造成功：支付收银台（`packages_page.dart` / `home_tab.dart`）、短信验证码（登录用本地滑块）。
 - 平台公告：后端无接口，`home_tab.dart` 只留占位说明，不展示假数据。
