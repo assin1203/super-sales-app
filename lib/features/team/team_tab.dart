@@ -3,32 +3,68 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api/team_api.dart';
 import '../../core/api_client.dart';
+import '../../core/models/page_result.dart';
 import '../../core/models/team_room.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/async_view.dart';
 import 'enter_room_flow.dart';
+import 'room_detail_view.dart';
 
-/// 我的团队：进行中房间置顶（座位 + 贡献值 + 轮次 + 奖池），
-/// 结束后房间在下；底部展示候补队列。
+/// 团队页选项卡：按房间等级（`TeamRoom.level`，即入房档位）分组。
 ///
-/// 数据源 `GET /team/rooms` 与 `GET /team/wait-queue`，点卡片进房间详情。
+/// [level] 为 null 的是兜底页「其他」：房间未定级（`level == null`）或档位
+/// 不是 L1/L2 时，避免自己的房间在有数据的页面上凭空消失。
+class _RoomTab {
+  const _RoomTab(this.label, this.level);
+
+  final String label;
+  final int? level;
+
+  bool matches(int? roomLevel) =>
+      level == null ? (roomLevel != 1 && roomLevel != 2) : roomLevel == level;
+}
+
+const List<_RoomTab> _baseTabs = [_RoomTab('L1', 1), _RoomTab('L2', 2)];
+const _RoomTab _otherTab = _RoomTab('其他', null);
+
+/// 我的团队：按 L1 / L2 选项卡切换，选项卡内直接铺开房间详情 ——
+/// 最上是「我筹备中的房间」，下面「已结束」按结束时间倒序
+/// （接口未下发结束时间时按 id 倒序，近似最近结束在前）。
+///
+/// 数据源 `GET /team/rooms`（我占过位或我当队长的房间）与
+/// `GET /team/wait-queue`；点房间卡片进 `/room/:id` 单页详情。
 class TeamTab extends StatefulWidget {
-  const TeamTab({super.key});
+  const TeamTab({super.key, this.api});
+
+  /// 便于测试注入，缺省用全局 [teamApi]
+  final TeamApi? api;
 
   @override
   State<TeamTab> createState() => _TeamTabState();
 }
 
-class _TeamTabState extends State<TeamTab> {
+class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
   List<TeamRoom> _rooms = const [];
   List<WaitQueueItem> _waitQueue = const [];
   bool _loading = true;
   String? _error;
 
+  TabController? _tabs;
+  List<_RoomTab> _tabSpecs = _baseTabs;
+
+  TeamApi get _api => widget.api ?? teamApi;
+
   @override
   void initState() {
     super.initState();
+    _tabs = TabController(length: _baseTabs.length, vsync: this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabs?.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -37,18 +73,21 @@ class _TeamTabState extends State<TeamTab> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        teamApi.rooms(pageSize: 50),
-        teamApi.waitQueue(),
+      // 两个请求并行发出；pageSize 顶到后端上限，房间总量不大。
+      // 用 Future.wait 而非裸的并发 await：任一失败时另一只的异常也已被
+      // 内部接管，不会逃逸成 uncaught async error。
+      final results = await Future.wait<Object>([
+        _api.rooms(pageSize: 100),
+        _api.waitQueue(),
       ]);
+      final page = results[0] as PageResult<TeamRoom>;
+      final queue = results[1] as List<WaitQueueItem>;
       if (!mounted) return;
-      final rooms = (results[0] as dynamic).items as List<TeamRoom>;
-      // 进行中（status=1）置顶，其次筹备中，已结束沉底
-      rooms.sort((a, b) => _rank(b).compareTo(_rank(a)));
       setState(() {
-        _rooms = rooms;
-        _waitQueue = results[1] as List<WaitQueueItem>;
+        _rooms = page.items;
+        _waitQueue = queue;
         _error = null;
+        _syncTabSpecs(page.items);
       });
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -56,17 +95,32 @@ class _TeamTabState extends State<TeamTab> {
         _rooms = const [];
         _waitQueue = const [];
         _error = e.displayMessage;
+        _syncTabSpecs(const []);
       });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  int _rank(TeamRoom r) => switch (r.status) {
-        1 => 2,
-        0 => 1,
-        _ => 0,
-      };
+  /// 出现非 L1/L2 的房间时补一个「其他」选项卡，其余情况保持两个。
+  void _syncTabSpecs(List<TeamRoom> rooms) {
+    final specs = rooms.any((r) => r.level != 1 && r.level != 2)
+        ? const [..._baseTabs, _otherTab]
+        : _baseTabs;
+    final current = _tabs;
+    if (current != null && current.length == specs.length) {
+      _tabSpecs = specs;
+      return;
+    }
+    final index = current == null ? 0 : current.index.clamp(0, specs.length - 1);
+    final old = current;
+    _tabs = TabController(length: specs.length, vsync: this, initialIndex: index);
+    _tabSpecs = specs;
+    // 等这一帧把 TabBar 重新绑定到新 controller 之后再释放旧的
+    if (old != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => old.dispose());
+    }
+  }
 
   /// 选档位后调 `POST /team/rooms/enter`；成功后刷新列表把新房间带出来。
   /// 团队页不拉积分总览，余额传 null（不展示当前积分，以后端判定为准）。
@@ -78,6 +132,7 @@ class _TeamTabState extends State<TeamTab> {
 
   @override
   Widget build(BuildContext context) {
+    final tabs = _tabs;
     return Scaffold(
       appBar: AppBar(
         title: const Text('我的团队'),
@@ -100,138 +155,172 @@ class _TeamTabState extends State<TeamTab> {
           onRetry: _load,
           emptyText: '还没有加入团队，达标后在队列中自动组队',
           emptyIcon: Icons.groups_outlined,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              for (final room in _rooms) ...[
-                _roomCard(room),
-                const SizedBox(height: 12),
-              ],
-              if (_waitQueue.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                _waitQueueCard(),
-              ],
-            ],
-          ),
+          child: tabs == null
+              ? const SizedBox.shrink()
+              : Column(
+                  children: [
+                    Material(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      child: TabBar(
+                        controller: tabs,
+                        labelColor: kqwPrimary,
+                        unselectedLabelColor: Colors.black54,
+                        indicatorColor: kqwPrimary,
+                        indicatorSize: TabBarIndicatorSize.label,
+                        tabs: [
+                          for (final spec in _tabSpecs) Tab(text: spec.label),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        controller: tabs,
+                        children: [for (final spec in _tabSpecs) _tabBody(spec)],
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
   }
 
-  Widget _roomCard(TeamRoom room) {
-    final inProgress = room.status == 1;
-    final totalContribution = room.positions.fold<int>(
-      0,
-      (sum, p) => sum + (int.tryParse(p.contribution) ?? 0),
-    );
-    // 权重进度：贡献值占满座位的比例（每座位 2 点为上限）
-    final progress = room.positions.isEmpty
-        ? 0.0
-        : (totalContribution / (room.positions.length * 2)).clamp(0.0, 1.0);
+  /// 单个选项卡：筹备中（status=0）在上，已结束（status=2）在下。
+  /// 进行中（status=1）的房间不在此页展示。
+  Widget _tabBody(_RoomTab tab) {
+    final preparing = _rooms
+        .where((r) => r.status == 0 && tab.matches(r.level))
+        .toList()
+      ..sort((a, b) => b.idValue.compareTo(a.idValue));
+    final ended = _rooms
+        .where((r) => r.status == 2 && tab.matches(r.level))
+        .toList()
+      ..sort(_compareEnded);
 
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        _sectionTitle('我筹备中的房间', preparing.length),
+        if (preparing.isEmpty)
+          _sectionEmpty('暂无筹备中的房间')
+        else
+          for (final room in preparing) ...[
+            _roomBlock(room),
+            const SizedBox(height: 12),
+          ],
+        const SizedBox(height: 4),
+        _sectionTitle('已结束', ended.length),
+        if (ended.isEmpty)
+          _sectionEmpty('暂无已结束的房间')
+        else
+          for (final room in ended) ...[
+            _roomBlock(room, ended: true),
+            const SizedBox(height: 12),
+          ],
+        if (_waitQueue.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          _waitQueueCard(),
+        ],
+      ],
+    );
+  }
+
+  /// 已结束房间排序：有结束时间按结束时间倒序；缺时间的一律沉底，
+  /// 同组内按 id 倒序（归档不改 id，id 越大创建越晚，近似最近结束在前）。
+  int _compareEnded(TeamRoom a, TeamRoom b) {
+    final at = a.endedAt;
+    final bt = b.endedAt;
+    if (at != null && bt != null) {
+      final byTime = bt.compareTo(at);
+      if (byTime != 0) return byTime;
+    } else if (at != null) {
+      return -1;
+    } else if (bt != null) {
+      return 1;
+    }
+    return b.idValue.compareTo(a.idValue);
+  }
+
+  Widget _sectionTitle(String text, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 14,
+            decoration: BoxDecoration(
+              color: kqwPrimary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(text,
+              style: const TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w700)),
+          const SizedBox(width: 6),
+          Text('$count',
+              style: const TextStyle(fontSize: 12, color: Colors.black45)),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionEmpty(String text) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(text,
+          style: const TextStyle(fontSize: 12, color: Colors.black38)),
+    );
+  }
+
+  /// 一间房：整张卡片就是详情（表头 + 1+2+4 座位图），点开进单页详情。
+  /// 已结束的房间补一行结束时间。
+  Widget _roomBlock(TeamRoom room, {bool ended = false}) {
     return Card(
       margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
         onTap: () => context.push('/room/${room.id}'),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: inProgress
-                          ? kqwPrimary.withValues(alpha: 0.1)
-                          : Colors.grey.shade200,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      room.statusName.isEmpty ? '未知状态' : room.statusName,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: inProgress ? kqwPrimary : Colors.black54,
+              RoomDetailView(room: room),
+              if (ended) ...[
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.event_available,
+                        size: 14, color: Colors.black38),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        room.endedAtText.isEmpty
+                            ? '结束时间未记录'
+                            : '结束于 ${room.endedAtText}',
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Colors.black45),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('房间 ${room.roomNo}',
-                      style: const TextStyle(
-                          fontSize: 15, fontWeight: FontWeight.w600)),
-                  const Spacer(),
-                  Text('${room.memberCount}/${room.positions.length} 人',
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.black45)),
-                  const Icon(Icons.chevron_right,
-                      size: 18, color: Colors.black26),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        minHeight: 6,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation(
-                            inProgress ? kqwPrimary : Colors.grey.shade400),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text('权重 $totalContribution',
-                      style: const TextStyle(
-                          fontSize: 11, color: Colors.black45)),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _metric('第 ${room.round} 轮', '轮次'),
-                  const SizedBox(width: 20),
-                  _metric(room.levelLabel, '等级'),
-                  const SizedBox(width: 20),
-                  _metric(room.rewardPool, inProgress ? '目标奖池' : '已分奖池'),
-                  const Spacer(),
-                  if (room.myPosition != null)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: kqwPrimary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('我的位置 ${room.myPosition}',
-                          style:
-                              const TextStyle(fontSize: 11, color: kqwPrimary)),
-                    ),
-                ],
-              ),
+                    const Text('查看详情',
+                        style: TextStyle(fontSize: 11.5, color: kqwPrimary)),
+                    const Icon(Icons.chevron_right,
+                        size: 16, color: kqwPrimary),
+                  ],
+                ),
+              ],
             ],
           ),
         ),
       ),
-    );
-  }
-
-  Widget _metric(String value, String label) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(value,
-            style:
-                const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-        Text(label,
-            style: const TextStyle(fontSize: 11, color: Colors.black45)),
-      ],
     );
   }
 

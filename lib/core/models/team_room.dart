@@ -83,6 +83,7 @@ class TeamRoom {
     this.level,
     this.leaderNickname,
     this.myPosition,
+    this.endedAt,
   });
 
   final String id;
@@ -104,6 +105,13 @@ class TeamRoom {
   /// 本人所在座位号（不在房间内为 null）
   final int? myPosition;
 
+  /// 结束（归档）时间，未结束或后端未下发时为 null。
+  ///
+  /// 后端库内字段是 `room.last_dividend_at`（归档时写入），C 端接口目前
+  /// 不下发；这里兼容 `endedAt` / `lastDividendAt` 两种写法，缺省按 null
+  /// 处理，排序回落到 [idValue] 倒序。
+  final DateTime? endedAt;
+
   final List<RoomPosition> positions;
 
   factory TeamRoom.fromJson(Map<String, dynamic> json) {
@@ -119,6 +127,9 @@ class TeamRoom {
       memberCount: (json['memberCount'] as num?)?.toInt() ?? 0,
       rewardPool: '${json['rewardPool'] ?? '0'}',
       myPosition: (json['myPosition'] as num?)?.toInt(),
+      endedAt: DateTime.tryParse(
+        '${json['endedAt'] ?? json['lastDividendAt'] ?? ''}',
+      )?.toLocal(),
       positions: rawPositions is List
           ? rawPositions
               .whereType<Map>()
@@ -131,6 +142,19 @@ class TeamRoom {
   bool get isMember => myPosition != null;
 
   String get levelLabel => level == null ? '未定级' : 'L$level';
+
+  /// id 数值化：已结束房间按「最近结束在前」近似排序用
+  /// （后端归档后 id 不变，但 id 越大创建越晚，可作结束时间的降级序）
+  BigInt get idValue => BigInt.tryParse(id) ?? BigInt.zero;
+
+  /// 结束时间 `2026-11-09 20:31`；未下发返回空串
+  String get endedAtText {
+    final t = endedAt;
+    if (t == null) return '';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${t.year}-${two(t.month)}-${two(t.day)} '
+        '${two(t.hour)}:${two(t.minute)}';
+  }
 }
 
 /// 房间成员（GET /team/rooms/{id}/members）
