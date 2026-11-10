@@ -2,7 +2,7 @@ name: kqw_app
 description: 超级展业系统 C 端商户 App（POS 展业 / 积分商城 / 7 人团队 / 任务中心）
 publish_to: "none"
 # 发版必须递增 build number（`+N` → Android versionCode），App 更新提示按它比较
-version: 0.1.0+1
+version: 0.1.1+2
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

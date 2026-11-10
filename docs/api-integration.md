@@ -7,9 +7,13 @@
 - 成功响应是**裸数据**，只有错误才包一层 `{code, message}`；`ApiClient` 已按此解析。
 - 所有 `BigInt`（id、积分、金额）序列化为**字符串**，模型层用 `String` 保精度，需要数值时再解析。
 - 后端未设 `setGlobalPrefix`，路径为根级（`/user/me`，**不是** `/api/user/me`）。
+- 生产基地址 `https://zhy-api.citykafei.com`（根路径就是后端，**无** `/appApi`、`/api` 前缀），
+  定义在 `lib/core/api_client.dart` 的 `apiBaseUrl`；本地联调用 `--dart-define=API_BASE_URL=http://<ip>:3000` 覆盖。
 - 三套独立 JWT（`admin` / `app` / `internal`），本端只用 `app`。
 - 全局 `ValidationPipe({whitelist:true, transform:true})`：DTO 未声明字段会被静默剔除，前端不要多传。
-- 分页统一 `{items, total, pageNum, pageSize}`，由 `PageResult<T>` 解析。
+- 分页信封统一 `{items, total, pageNum, pageSize}`，由 `PageResult<T>` 解析；**公告是例外**（字段名 `list`，
+  `notice_api.dart#list` 传了 `listKey: 'list'`）；banner / 礼包 / 任务 / 地址 / 候补等不分页接口只有 `{items, total}`，
+  `PageResult.fromListJson` 兼容。
 
 ## 接口 → 封装 → 页面
 
@@ -25,7 +29,7 @@
 | 推广 | `GET /user/invite` | `user_api.dart#invite` | `referral_page.dart` |
 | 推广 | `GET /user/invite/records` | `user_api.dart#inviteRecords` | `referral_page.dart` 下级明细 |
 | 推广 | `GET /user/ancestors` | `user_api.dart#ancestors` | 已封装，暂无页面消费 |
-| 积分 | `GET /user/points` | `points_api.dart#summary` | `me_tab.dart`、`mall_tab.dart` 余额 |
+| 积分 | `GET /user/points` | `points_api.dart#summary`（另有 `user_api.dart#points` 同端点封装，无调用方） | `me_tab.dart`、`mall_tab.dart`、`home_tab.dart` 余额 |
 | 积分 | `GET /points/flows` | `points_api.dart#flows` | `points_flow_page.dart`（类型筛选 + 分页） |
 | 积分 | `GET /points/packages` | `points_api.dart#packages` | `home_tab.dart`、`packages_page.dart` |
 | 积分 | `POST /points/packages/{id}/order` | `points_api.dart#createPackageOrder` | 同上，下单后提示待接支付 SDK |
@@ -39,13 +43,17 @@
 | 机器 | `GET /pos/machines`、`GET /pos/machines/{sn}` | `pos_api.dart` | `machines_page.dart`、首页达标卡 |
 | 机器 | `POST /pos/apply`（`proofImages` 装机凭证截图 URL 数组 ≤4 张，选填，先调 `POST /common/upload/image`；说明见 `install_guide_page.dart`）、`POST /pos/newbie/submit` | `pos_api.dart` | `apply_machine_page.dart` 装机申请（首页入口，凭证截图区在申请信息下方）、`machines_page.dart` 新手机器提交 |
 | 机器 | `GET /pos/applies`（`status`/`source` 筛选） | `pos_api.dart#applies` | `machines_page.dart`「已提交」列表 |
-| 机器 | `POST /pos/applies/{id}/install`（`installMode` 1 平台安装 / 2 用户自装；补录 `bootTime`/`contactName`/`merchantName`/`region`/`address`/`remark`/`trafficFeeRemark`；后端 `proofImages` 字段保留，App 不再上传） | `pos_api.dart#installApply` | `machines_page.dart` 已通过申请「立即装机」 |
-| 机器 | `POST /pos/applies/install`（按手机号装机，`phone` 必填，`installMode`/`machineNo`/品牌类型/补录字段可选） | `pos_api.dart#installApplyByPhone` | `add_machine_page.dart`「安装 POS 机」（装机页无凭证区） |
+| 机器 | `POST /pos/applies/{id}/install`（`installMode` 1 平台安装 / 2 用户自装；补录 `bootTime`/`contactName`/`merchantName`/`region`/`address`/`remark`/`trafficFeeRemark`；后端 `proofImages` 字段保留，App 不再上传） | `pos_api.dart#installApply` | `machines_page.dart` 已通过申请「立即装机」、`add_machine_page.dart` 装机页（先查到 `applyId` 再调它） |
+| 机器 | `GET /pos/applies/pending-by-phone`（按手机号查待装机申请，返回 `PendingInstallPreview`：0 条给提示、1 条直接装、多条弹选择） | `pos_api.dart#pendingAppliesByPhone` | `add_machine_page.dart`「安装 POS 机」第一步 |
+| 机器 | `POST /pos/applies/install`（服务端按手机号直接装机） | `pos_api.dart#installApplyByPhone`（**死代码：全仓无调用方**） | 未使用，装机统一走 `pendingAppliesByPhone` + `installApply`，保留待清理 |
+| 机器 | `GET /pos/brands`、`GET /pos/types`（品牌/类型下拉，仅下发 `status=1` 且按 `sort` 升序） | `pos_api.dart#brands` / `#types` | `add_machine_page.dart` 表单、`machines_page.dart` 装机弹窗 |
 | 机器 | `POST /common/upload/image`（multipart 字段 `file`，jpg/png/gif/webp ≤5MB，返回 `{url,key,size}`） | `api_client.dart#uploadImage` | 申请凭证截图、头像上传 |
-| 机器 | `POST /pos/machines`（`MachineCreateDto`，直接建机） | `pos_api.dart#addMachine` | 已无页面调用，装机统一走 `/pos/applies/install` |
-| 机器 | `GET /pos/applies/by-phone`（按手机号查申请） | 未接入 | 客服/帮客户装机场景备用 |
+| 机器 | `POST /pos/machines`（`MachineCreateDto`，直接建机） | `pos_api.dart#addMachine` | 已无页面调用，装机统一走 `pendingAppliesByPhone` + `POST /pos/applies/{id}/install` |
 | 任务 | `GET /tasks`、`GET /tasks/{code}`、`POST /tasks/{code}/claim` | `task_api.dart` | `task_tab.dart`、首页任务卡 |
+| 积分 | `POST /points/transfers`（会员互赠：扣转出方 → 加接收方，双方各留流水） | `points_api.dart#transfer` | `points_transfer_page.dart` 积分转让 |
 | 团队 | `GET /team/rooms`、`GET /team/rooms/{id}`、`GET /team/rooms/{id}/members` | `team_api.dart` | `team_tab.dart`、`room_detail_page.dart` |
+| 团队 | `GET /team/room-packages`（档位列表，按 `sort` 升序） | `team_api.dart#roomPackages` | `home_tab.dart` 房间档位卡 |
+| 团队 | `POST /team/rooms/enter`（`packageId` 选填，缺省默认档；回执含 `entryPoints`/`purchased`/`uplineId`/`rebound`） | `team_api.dart#enterRoom` | `enter_room_flow.dart`（首页/团队页共用） |
 | 团队 | `GET /team/wait-queue` | `team_api.dart#waitQueue` | `team_tab.dart` 候补队列 |
 | 首页 | `GET /home/banners` | `home_api.dart#banners` | `home_tab.dart` 轮播（空则回落本地图） |
 | 支付 | `POST /payment/order`、`GET /payment/order/{id}` | `payment_api.dart` | 已封装，收银台待接 SDK |
@@ -105,7 +113,8 @@ App 静默放行——更新提示永远不能把用户卡在门外。
 
 ## 与 v2.0 文档的已知差异
 
-1. 文档 59 条路径，运行实例 84 条；C 端实际 34 条，`app/home`、`app/points`、`app/pos`、`app/task`、`app/team`、`app/payment` 等模块文档未覆盖。
+1. 文档 59 条路径，当前运行实例 C 端（`src/modules/app` + `src/modules/common`）按控制器装饰器计数为 64 个端点，
+   另有 `admin/*` 与 `internal/*` 若干；`app/home`、`app/points`、`app/pos`、`app/task`、`app/team`、`app/payment` 等模块文档未覆盖。
 2. 文档未给响应模型；字段类型以 mapper/service 为准（如 `BigInt → string`）。
 3. 前端密码校验下限按后端 8 位对齐；`/mall/exchange`、`/user/me` 的响应语义按源码而非文档。
 4. 文档中的 `/api` 前缀在本实例不存在。

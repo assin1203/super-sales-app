@@ -2,11 +2,12 @@ import 'package:dio/dio.dart';
 
 /// 后端地址。
 ///
-/// 默认指向生产环境（网关前缀 `/appApi`）；本地联调时用
+/// 默认指向生产环境：`https://zhy-api.citykafei.com` 的根路径就是后端
+/// （无 `/appApi`、`/api` 之类前缀，CORS 已放通）。本地联调时用
 /// `flutter run --dart-define=API_BASE_URL=http://<ip>:3000` 覆盖。
 const String apiBaseUrl = String.fromEnvironment(
   'API_BASE_URL',
-  defaultValue: 'https://pos.citykafei.com/appApi',
+  defaultValue: 'https://zhy-api.citykafei.com',
 );
 
 /// 后端业务错误。
