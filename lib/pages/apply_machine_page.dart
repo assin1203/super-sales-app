@@ -10,6 +10,7 @@ import '../core/auth_provider.dart';
 import '../core/models/machine.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
+import '../core/widgets/region_picker.dart';
 import 'install_guide_page.dart';
 
 /// 申请 POS 机（首页入口 `/machine/apply`）。
@@ -33,8 +34,8 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
-  final _merchantCtrl = TextEditingController();
-  final _regionCtrl = TextEditingController();
+  /// 所在地区：省市区拼串，由 [RegionPickerField] 选择后写入
+  String _region = '';
   final _addressCtrl = TextEditingController();
   final _remarkCtrl = TextEditingController();
   bool _submitting = false;
@@ -102,8 +103,6 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
   void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
-    _merchantCtrl.dispose();
-    _regionCtrl.dispose();
     _addressCtrl.dispose();
     _remarkCtrl.dispose();
     super.dispose();
@@ -135,8 +134,7 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
         contactName: _nameCtrl.text.trim(),
         phone: _phoneCtrl.text.trim(),
         useType: _useType,
-        merchantName: _merchantCtrl.text.trim(),
-        region: _regionCtrl.text.trim(),
+        region: _region,
         address: _addressCtrl.text.trim(),
         remark: _remarkCtrl.text.trim(),
         proofImages: proofUrls,
@@ -205,21 +203,10 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
                 ),
               ),
               _labeled(
-                '门店名称',
-                child: TextFormField(
-                  controller: _merchantCtrl,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                  decoration: _inputDecoration('如：XX便利店（选填）'),
-                ),
-              ),
-              _labeled(
                 '所在地区',
-                child: TextFormField(
-                  controller: _regionCtrl,
-                  textInputAction: TextInputAction.next,
-                  inputFormatters: [LengthLimitingTextInputFormatter(50)],
-                  decoration: _inputDecoration('如：广东省深圳市南山区（选填）'),
+                child: RegionPickerField(
+                  value: _region,
+                  onChanged: (value) => setState(() => _region = value),
                 ),
               ),
               _labeled(
