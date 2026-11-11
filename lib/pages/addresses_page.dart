@@ -7,6 +7,7 @@ import '../core/models/address.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
 import '../core/widgets/async_view.dart';
+import '../core/widgets/region_picker.dart';
 
 /// 收货地址管理（列表 / 新增 / 编辑 / 设默认 / 删除）
 ///
@@ -205,9 +206,9 @@ class _AddressesPageState extends State<AddressesPage> {
   Future<void> _showForm(AddressItem? orig) async {
     final receiverCtrl = TextEditingController(text: orig?.receiver ?? '');
     final phoneCtrl = TextEditingController(text: orig?.phone ?? '');
-    final provinceCtrl = TextEditingController(text: orig?.province ?? '');
-    final cityCtrl = TextEditingController(text: orig?.city ?? '');
-    final districtCtrl = TextEditingController(text: orig?.district ?? '');
+    var province = orig?.province ?? '';
+    var city = orig?.city ?? '';
+    var district = orig?.district ?? '';
     final detailCtrl = TextEditingController(text: orig?.detail ?? '');
     var isDefault = orig?.isDefault ?? false;
     var submitting = false;
@@ -219,9 +220,6 @@ class _AddressesPageState extends State<AddressesPage> {
           Future<void> submit() async {
             final receiver = receiverCtrl.text.trim();
             final phone = phoneCtrl.text.trim();
-            final province = provinceCtrl.text.trim();
-            final city = cityCtrl.text.trim();
-            final district = districtCtrl.text.trim();
             final detail = detailCtrl.text.trim();
             if (receiver.isEmpty ||
                 phone.length < 11 ||
@@ -282,11 +280,26 @@ class _AddressesPageState extends State<AddressesPage> {
                         keyboardType: TextInputType.phone,
                         formatters: [FilteringTextInputFormatter.digitsOnly]),
                     const SizedBox(height: 12),
-                    _field(provinceCtrl, '省 / 直辖市', Icons.place_outlined, 20),
-                    const SizedBox(height: 12),
-                    _field(cityCtrl, '市', Icons.location_city_outlined, 20),
-                    const SizedBox(height: 12),
-                    _field(districtCtrl, '区 / 县', Icons.place_outlined, 20),
+                    RegionSelectTile(
+                      text: [province, city, district]
+                          .where((s) => s.isNotEmpty)
+                          .join(' '),
+                      hint: '省 / 市 / 区（点击选择）',
+                      onTap: () async {
+                        final picked = await showRegionPicker(
+                          ctx,
+                          province: province,
+                          city: city,
+                          district: district,
+                        );
+                        if (picked == null || !ctx.mounted) return;
+                        setDialogState(() {
+                          province = picked.province;
+                          city = picked.city;
+                          district = picked.district;
+                        });
+                      },
+                    ),
                     const SizedBox(height: 12),
                     _field(detailCtrl, '详细地址（街道/门牌/楼层）',
                         Icons.home_outlined, 60),

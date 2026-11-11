@@ -102,4 +102,59 @@ void main() {
     ));
     expect(find.text('北京市东城区'), findsOneWidget);
   });
+
+  testWidgets('传入已有省市区时预选，可直接改区县', (tester) async {
+    RegionSelection? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () async {
+              picked = await showRegionPicker(ctx,
+                  province: '广东省', city: '深圳市', district: '南山区');
+            },
+            child: const Text('选地区'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('选地区'));
+    await tester.pumpAndSettle();
+    // 三级都预选上了，所以「确定」可用；改区县后确认
+    await tester.tap(find.text('福田区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    expect(picked, isNotNull);
+    expect(picked!.text, '广东省深圳市福田区');
+    expect(picked!.district, '福田区');
+  });
+
+  testWidgets('回显值在数据里不存在时不预选', (tester) async {
+    RegionSelection? picked;
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (ctx) => TextButton(
+            onPressed: () async {
+              picked = await showRegionPicker(ctx,
+                  province: '火星省', city: '火星市', district: '火星区');
+            },
+            child: const Text('选地区'),
+          ),
+        ),
+      ),
+    ));
+
+    await tester.tap(find.text('选地区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+
+    // 没选齐时确定不生效，弹层留在原地
+    expect(picked, isNull);
+    expect(find.text('确定'), findsOneWidget);
+  });
 }

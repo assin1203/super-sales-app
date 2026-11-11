@@ -69,7 +69,98 @@ String joinRegion(String province, String city, String district) {
   return '$province$tail';
 }
 
-/// 表单里的省市区选择项：外观与 TextFormField 一致，点击弹出三段联动选择。
+/// 一次选择的结果：收货地址要三段分开存，POS 申请只要拼串
+class RegionSelection {
+  const RegionSelection({
+    required this.province,
+    required this.city,
+    required this.district,
+  });
+
+  final String province;
+  final String city;
+  final String district;
+
+  /// 拼成一行的地区文本（广东省深圳市南山区 / 北京市东城区）
+  String get text => joinRegion(province, city, district);
+}
+
+/// 弹出省市区选择：确认返回三段结果，取消返回 null。
+///
+/// [province] / [city] / [district] 传已保存的值用于回显（编辑地址场景），
+/// 值在数据里找不到时不预选，避免旧数据挡住校验。
+Future<RegionSelection?> showRegionPicker(
+  BuildContext context, {
+  String? province,
+  String? city,
+  String? district,
+}) {
+  return showModalBottomSheet<RegionSelection>(
+    context: context,
+    backgroundColor: Colors.white,
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (_) => _RegionSheet(
+      province: province,
+      city: city,
+      district: district,
+    ),
+  );
+}
+
+/// 外观与输入框一致的可点击项：点击由调用方决定怎么选，
+/// 用于需要拿到省/市/区三段（而不是拼串）的表单，比如收货地址。
+class RegionSelectTile extends StatelessWidget {
+  const RegionSelectTile({
+    super.key,
+    required this.text,
+    required this.onTap,
+    this.hint = '请选择省 / 市 / 区',
+    this.errorText,
+  });
+
+  /// 已选文本，空串按未选显示 [hint]
+  final String text;
+  final VoidCallback onTap;
+  final String hint;
+
+  /// 校验失败时的红字提示
+  final String? errorText;
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = text.isEmpty;
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: onTap,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          border: _border(),
+          enabledBorder: _border(),
+          errorText: errorText,
+          suffixIcon: const Icon(Icons.keyboard_arrow_down,
+              size: 20, color: Color(0xFF8A93A6)),
+        ),
+        child: Text(
+          empty ? hint : text,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            color: empty ? const Color(0xFF9AA3B2) : const Color(0xFF1F2430),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 表单里的省市区选择项：值为省市区拼串（POS 申请页用）
 class RegionPickerField extends StatelessWidget {
   const RegionPickerField({
     super.key,
@@ -85,48 +176,15 @@ class RegionPickerField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final empty = value.isEmpty;
-    return InkWell(
-      borderRadius: BorderRadius.circular(10),
+    return RegionSelectTile(
+      text: value,
+      hint: hint,
       onTap: () async {
         final picked = await showRegionPicker(context);
-        if (picked != null) onChanged(picked);
+        if (picked != null) onChanged(picked.text);
       },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-          border: _border(),
-          enabledBorder: _border(),
-          suffixIcon: const Icon(Icons.keyboard_arrow_down,
-              size: 20, color: Color(0xFF8A93A6)),
-        ),
-        child: Text(
-          empty ? hint : value,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 14,
-            color: empty ? const Color(0xFF9AA3B2) : const Color(0xFF1F2430),
-          ),
-        ),
-      ),
     );
   }
-}
-
-/// 弹出省市区选择，确认返回拼串，取消返回 null
-Future<String?> showRegionPicker(BuildContext context) {
-  return showModalBottomSheet<String>(
-    context: context,
-    backgroundColor: Colors.white,
-    isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
-    builder: (_) => const _RegionSheet(),
-  );
 }
 
 OutlineInputBorder _border() => OutlineInputBorder(
@@ -135,7 +193,11 @@ OutlineInputBorder _border() => OutlineInputBorder(
     );
 
 class _RegionSheet extends StatefulWidget {
-  const _RegionSheet();
+  const _RegionSheet({this.province, this.city, this.district});
+
+  final String? province;
+  final String? city;
+  final String? district;
 
   @override
   State<_RegionSheet> createState() => _RegionSheetState();
@@ -152,6 +214,24 @@ class _RegionSheetState extends State<_RegionSheet> {
   void initState() {
     super.initState();
     _future = RegionData.load();
+    // 回显：数据到位后按"确实存在"逐级预选，找不到的那一级就当没选
+    _future.then((data) {
+      if (!mounted) return;
+      final province =
+          data.provinces.contains(widget.province) ? widget.province : null;
+      final city =
+          data.citiesOf(province).contains(widget.city) ? widget.city : null;
+      final district = data
+              .districtsOf(province, city)
+              .contains(widget.district)
+          ? widget.district
+          : null;
+      setState(() {
+        _province = province;
+        _city = city;
+        _district = district;
+      });
+    });
   }
 
   void _pickProvince(RegionData data, String value) {
@@ -239,8 +319,11 @@ class _RegionSheetState extends State<_RegionSheet> {
                   height: 44,
                   child: FilledButton(
                     onPressed: canConfirm
-                        ? () => Navigator.of(context)
-                            .pop(joinRegion(_province!, _city!, _district!))
+                        ? () => Navigator.of(context).pop(RegionSelection(
+                              province: _province!,
+                              city: _city!,
+                              district: _district!,
+                            ))
                         : null,
                     style: FilledButton.styleFrom(
                       backgroundColor: const Color(0xFFFF6A3D),
@@ -262,7 +345,8 @@ class _RegionSheetState extends State<_RegionSheet> {
   }
 
   /// 单列可选列表：选中项高亮，未选中的层级显示提示
-  Widget _column(List<String> items, String? selected, ValueChanged<String> onTap) {
+  Widget _column(
+      List<String> items, String? selected, ValueChanged<String> onTap) {
     if (items.isEmpty) {
       return const Expanded(
         child: Center(
