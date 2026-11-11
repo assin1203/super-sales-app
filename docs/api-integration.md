@@ -24,7 +24,7 @@
 | 认证 | `POST /user/register` | `user_api.dart#register` | 仅 service 层保留（注册页未做） |
 | 认证 | `POST /user/refresh` | `user_api.dart#refresh` | `auth_provider.dart` 静默续期 / 401 重放 |
 | 认证 | `POST /user/logout` | `user_api.dart#logout` | `me_tab.dart` 退出登录 |
-| 资料 | `GET /user/me` | `user_api.dart#me` | `auth_provider.dart#loadProfile` → 首页/我的/资料页 |
+| 资料 | `GET /user/me` | `user_api.dart#me` | `auth_provider.dart#loadProfile` → 首页/我的/资料页；`lv1ReferrerNickname` / `lv2ReferrerNickname` 是 L1/L2 房间上线昵称（团队页选项卡「L1 张三」） |
 | 资料 | `PUT /user/profile` | `user_api.dart#updateProfile` | `profile_page.dart` 保存昵称/头像 |
 | 资料 | `PUT /user/password` | `user_api.dart#changePassword` | `password_page.dart`（成功后强制重登） |
 | 推广 | `GET /user/invite` | `user_api.dart#invite` | `referral_page.dart` |
@@ -53,7 +53,7 @@
 | 机器 | `POST /pos/machines`（`MachineCreateDto`，直接建机） | `pos_api.dart#addMachine` | 已无页面调用，装机统一走 `pendingAppliesByPhone` + `POST /pos/applies/{id}/install` |
 | 任务 | `GET /tasks`、`GET /tasks/{code}`、`POST /tasks/{code}/claim` | `task_api.dart` | `task_tab.dart`、首页任务卡 |
 | 积分 | `POST /points/transfers`（会员互赠：扣转出方 → 加接收方，双方各留流水） | `points_api.dart#transfer` | `points_transfer_page.dart` 积分转让 |
-| 团队 | `GET /team/rooms`、`GET /team/rooms/{id}`、`GET /team/rooms/{id}/members` | `team_api.dart` | `team_tab.dart`、`room_detail_page.dart` |
+| 团队 | `GET /team/rooms`、`GET /team/rooms/{id}`、`GET /team/rooms/{id}/members`（房间 VO 另含 `startedAt` 开始时间、`endedAt` 完成时间——优先归档时间 `room.last_dividend_at`、缺失回落末次分红时间、都没有为 null、`firstContributionUserId` 最先拿到贡献值的成员 userId，已结束房间座位据此加皇冠） | `team_api.dart` | `team_tab.dart`、`room_detail_page.dart` |
 | 团队 | `GET /team/room-packages`（档位列表，按 `sort` 升序） | `team_api.dart#roomPackages` | `home_tab.dart` 房间档位卡 |
 | 团队 | `POST /team/rooms/enter`（`packageId` 选填，缺省默认档；回执含 `entryPoints`/`purchased`/`uplineId`/`rebound`） | `team_api.dart#enterRoom` | `enter_room_flow.dart`（首页/团队页共用） |
 | 团队 | `GET /team/wait-queue` | `team_api.dart#waitQueue` | `team_tab.dart` 候补队列 |
