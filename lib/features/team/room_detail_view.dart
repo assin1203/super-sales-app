@@ -130,18 +130,20 @@ class RoomDetailView extends StatelessWidget {
           .map((seat) => Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: _seatTile(seat, diameter),
+                  child: _seatTile(room, seat, diameter),
                 ),
               ))
           .toList(),
     );
   }
 
-  /// 已占座位：头像（自己加粗白边，下缘压贡献值角标）+ 昵称 + 脱敏手机号 + 入房时间
-  Widget _seatTile(RoomPosition seat, double diameter) {
+  /// 已占座位：头像（自己加粗白边，下缘压贡献值角标）+ 昵称 + 脱敏手机号 + 入房时间；
+  /// 已结束房间里「最先拿到贡献值」的人，头像右上角加皇冠
+  Widget _seatTile(TeamRoom room, RoomPosition seat, double diameter) {
     if (!seat.occupied) return _emptySeat(diameter);
     final contribution = int.tryParse(seat.contribution) ?? 0;
     final avatarUrl = (seat.avatar ?? '').trim();
+    final crowned = room.isFirstContributor(seat);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -174,6 +176,25 @@ class RoomDetailView extends StatelessWidget {
                         color: Colors.white70, size: diameter * 0.5)
                     : null,
               ),
+              if (crowned)
+                Positioned(
+                  top: -4,
+                  right: -2,
+                  child: Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text(
+                      '👑',
+                      style: TextStyle(
+                        fontSize: diameter * 0.26,
+                        height: 1,
+                      ),
+                    ),
+                  ),
+                ),
               if (contribution > 0)
                 Positioned(
                   bottom: 0,

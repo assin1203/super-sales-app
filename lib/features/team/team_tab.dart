@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/api/team_api.dart';
 import '../../core/api_client.dart';
+import '../../core/auth_provider.dart';
 import '../../core/models/page_result.dart';
 import '../../core/models/team_room.dart';
+import '../../core/models/user_info.dart';
 import '../../core/theme.dart';
 import '../../core/widgets/async_view.dart';
 import 'enter_room_flow.dart';
@@ -59,6 +62,10 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
     super.initState();
     _tabs = TabController(length: _baseTabs.length, vsync: this);
     _load();
+    // 选项卡要显示 L1/L2 上线昵称：登录快照只有四个字段，进页时补一次完整资料
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AuthProvider>().loadProfile();
+    });
   }
 
   @override
@@ -122,6 +129,18 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
     }
   }
 
+  /// 选项卡文字：`L1 张三` / `L2 李四`（上线昵称取 `GET /user/me` 的
+  /// lv1/lv2ReferrerNickname）；未绑定上线或对方没昵称时退回纯 `L1` / `L2`。
+  String _tabLabel(_RoomTab spec, UserInfo? user) {
+    final raw = switch (spec.level) {
+      1 => user?.lv1ReferrerNickname,
+      2 => user?.lv2ReferrerNickname,
+      _ => null,
+    };
+    final name = raw?.trim() ?? '';
+    return name.isEmpty ? spec.label : '${spec.label} $name';
+  }
+
   /// 选档位后调 `POST /team/rooms/enter`；成功后刷新列表把新房间带出来。
   /// 团队页不拉积分总览，余额传 null（不展示当前积分，以后端判定为准）。
   Future<void> _enterRoom() async {
@@ -133,6 +152,7 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final tabs = _tabs;
+    final auth = context.watch<AuthProvider>();
     return Scaffold(
       appBar: AppBar(
         title: const Text('我的团队'),
@@ -168,7 +188,8 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
                         indicatorColor: kqwPrimary,
                         indicatorSize: TabBarIndicatorSize.label,
                         tabs: [
-                          for (final spec in _tabSpecs) Tab(text: spec.label),
+                          for (final spec in _tabSpecs)
+                            Tab(text: _tabLabel(spec, auth.user)),
                         ],
                       ),
                     ),
@@ -298,14 +319,14 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
                 const SizedBox(height: 10),
                 Row(
                   children: [
-                    const Icon(Icons.event_available,
+                    const Icon(Icons.play_circle_outline,
                         size: 14, color: Colors.black38),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        room.endedAtText.isEmpty
-                            ? '结束时间未记录'
-                            : '结束于 ${room.endedAtText}',
+                        room.startedAtText.isEmpty
+                            ? '开始时间未记录'
+                            : '开始于 ${room.startedAtText}',
                         style: const TextStyle(
                             fontSize: 11.5, color: Colors.black45),
                       ),
@@ -314,6 +335,23 @@ class _TeamTabState extends State<TeamTab> with TickerProviderStateMixin {
                         style: TextStyle(fontSize: 11.5, color: kqwPrimary)),
                     const Icon(Icons.chevron_right,
                         size: 16, color: kqwPrimary),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    const Icon(Icons.event_available,
+                        size: 14, color: Colors.black38),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        room.endedAtText.isEmpty
+                            ? '完成时间未记录'
+                            : '完成于 ${room.endedAtText}',
+                        style: const TextStyle(
+                            fontSize: 11.5, color: Colors.black45),
+                      ),
+                    ),
                   ],
                 ),
               ],

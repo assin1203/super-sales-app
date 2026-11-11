@@ -87,6 +87,8 @@ class TeamRoom {
     this.leaderNickname,
     this.myPosition,
     this.endedAt,
+    this.startedAt,
+    this.firstContributionUserId,
   });
 
   final String id;
@@ -110,10 +112,17 @@ class TeamRoom {
 
   /// 结束（归档）时间，未结束或后端未下发时为 null。
   ///
-  /// 后端库内字段是 `room.last_dividend_at`（归档时写入），C 端接口目前
-  /// 不下发；这里兼容 `endedAt` / `lastDividendAt` 两种写法，缺省按 null
-  /// 处理，排序回落到 [idValue] 倒序。
+  /// 后端优先下发 `endedAt`（`room.last_dividend_at`，归档时写入），
+  /// 缺失时用该房末次分红时间兜底；两处都没有才为 null。
   final DateTime? endedAt;
+
+  /// 开始时间（`room.created_at`，开房即开始），老后端未下发时为 null
+  final DateTime? startedAt;
+
+  /// 「最先拿到贡献值」的成员 userId（已结束房间里最早一条分红的得主）。
+  ///
+  /// 只有已结束房间才可能非空，座位头像据此加皇冠。
+  final String? firstContributionUserId;
 
   final List<RoomPosition> positions;
 
@@ -133,6 +142,9 @@ class TeamRoom {
       endedAt: DateTime.tryParse(
         '${json['endedAt'] ?? json['lastDividendAt'] ?? ''}',
       )?.toLocal(),
+      startedAt: DateTime.tryParse('${json['startedAt'] ?? ''}')?.toLocal(),
+      firstContributionUserId:
+          (json['firstContributionUserId'] as String?)?.trim(),
       positions: rawPositions is List
           ? rawPositions
               .whereType<Map>()
@@ -157,6 +169,22 @@ class TeamRoom {
     String two(int v) => v.toString().padLeft(2, '0');
     return '${t.year}-${two(t.month)}-${two(t.day)} '
         '${two(t.hour)}:${two(t.minute)}';
+  }
+
+  /// 开始时间 `2026-11-01 10:00`；老后端未下发返回空串
+  String get startedAtText {
+    final t = startedAt;
+    if (t == null) return '';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${t.year}-${two(t.month)}-${two(t.day)} '
+        '${two(t.hour)}:${two(t.minute)}';
+  }
+
+  /// 该座位是否是「最先拿到贡献值」的人（只在已结束房间里判定）
+  bool isFirstContributor(RoomPosition seat) {
+    if (status != 2) return false;
+    final first = firstContributionUserId;
+    return first != null && first.isNotEmpty && first == seat.userId;
   }
 }
 

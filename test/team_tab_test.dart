@@ -5,11 +5,18 @@ import 'dart:typed_data';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:kqw_app/core/api/team_api.dart';
 import 'package:kqw_app/core/api_client.dart';
+import 'package:kqw_app/core/auth_provider.dart';
+import 'package:kqw_app/core/models/team_room.dart';
 import 'package:kqw_app/core/theme.dart';
+import 'package:kqw_app/features/team/room_detail_view.dart';
 import 'package:kqw_app/features/team/team_tab.dart';
+
+import 'support/memory_secure_store.dart';
 
 /// 打桩 HTTP 适配器：按 path 返回预置 JSON。
 class _Adapter implements HttpClientAdapter {
@@ -57,6 +64,8 @@ Map<String, dynamic> _room({
   required int status,
   required int? level,
   String? endedAt,
+  String? startedAt,
+  String? firstContributionUserId,
 }) =>
     {
       'id': '$id',
@@ -74,8 +83,22 @@ Map<String, dynamic> _room({
       'rewardPool': '1200',
       'myPosition': 1,
       if (endedAt != null) 'endedAt': endedAt,
+      if (startedAt != null) 'startedAt': startedAt,
+      if (firstContributionUserId != null)
+        'firstContributionUserId': firstContributionUserId,
       'positions': [_seat(1, nickname: '队长'), _seat(2)],
     };
+
+/// 用本地用户快照造登录态：`kqw.user` 在 [AuthProvider.init] 里直接恢复，
+/// 不需要网络与平台通道（安全存储注入内存实现）。
+Future<AuthProvider> _authWithUser(Map<String, dynamic>? user) async {
+  SharedPreferences.setMockInitialValues(
+    user == null ? {} : {'kqw.user': jsonEncode(user)},
+  );
+  final auth = AuthProvider(secureStore: MemorySecureStore());
+  await auth.init();
+  return auth;
+}
 
 /// 渲染团队页并推进到数据就绪（真实 dio + 打桩 adapter）。
 ///
@@ -85,6 +108,7 @@ Future<void> _pumpTeamTab(
   WidgetTester tester,
   List<Map<String, dynamic>> rooms, {
   List<Map<String, dynamic>> waitQueue = const [],
+  Map<String, dynamic>? user,
 }) async {
   tester.view.physicalSize = const Size(360, 2400);
   tester.view.devicePixelRatio = 1.0;
@@ -109,15 +133,17 @@ Future<void> _pumpTeamTab(
     }
   });
 
-  final api = TeamApi(
-    client: ApiClient(
-      dio: Dio(BaseOptions(baseUrl: 'http://test.local'))
-        ..httpClientAdapter = adapter,
-    ),
+  final client = ApiClient(
+    dio: Dio(BaseOptions(baseUrl: 'http://test.local'))
+      ..httpClientAdapter = adapter,
   );
 
+  final auth = await _authWithUser(user);
   await tester.pumpWidget(
-    MaterialApp(theme: kqwTheme, home: TeamTab(api: api)),
+    ChangeNotifierProvider<AuthProvider>.value(
+      value: auth,
+      child: MaterialApp(theme: kqwTheme, home: TeamTab(api: TeamApi(client: client))),
+    ),
   );
   for (var i = 0; i < 6; i++) {
     await tester.pump(const Duration(milliseconds: 20));
@@ -131,8 +157,20 @@ void main() {
   testWidgets('L1 选项卡：筹备中在上，已结束按结束时间倒序', (tester) async {
     await _pumpTeamTab(tester, [
       _room(id: 11, status: 0, level: 1),
-      _room(id: 12, status: 2, level: 1, endedAt: '2026-11-09T12:00:00Z'),
-      _room(id: 10, status: 2, level: 1, endedAt: '2026-11-01T12:00:00Z'),
+      _room(
+        id: 12,
+        status: 2,
+        level: 1,
+        startedAt: '2026-11-01T02:00:00Z',
+        endedAt: '2026-11-09T12:00:00Z',
+      ),
+      _room(
+        id: 10,
+        status: 2,
+        level: 1,
+        startedAt: '2026-10-20T02:00:00Z',
+        endedAt: '2026-11-01T12:00:00Z',
+      ),
     ]);
 
     // 两个等级选项卡
@@ -150,11 +188,41 @@ void main() {
     expect(_top(tester, '房间 R11'), lessThan(_top(tester, '房间 R12')));
     // 已结束按结束时间倒序：11-09 在 11-01 之前
     expect(_top(tester, '房间 R12'), lessThan(_top(tester, '房间 R10')));
-    // 已结束房间带结束时间行
-    expect(find.textContaining('结束于'), findsNWidgets(2));
+    // 已结束房间同时给出开始与完成两个时间
+    expect(find.textContaining('开始于'), findsNWidgets(2));
+    expect(find.textContaining('完成于'), findsNWidgets(2));
 
     // 360dp 窄屏渲染不溢出
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('L1/L2 选项卡带上各自上线昵称', (tester) async {
+    await _pumpTeamTab(
+      tester,
+      [_room(id: 11, status: 0, level: 1)],
+      user: {
+        'id': '1',
+        'phone': '13800000001',
+        'nickname': '我',
+        'level': 1,
+        'lv1ReferrerNickname': '张三',
+        'lv2ReferrerNickname': '李四',
+      },
+    );
+
+    expect(find.widgetWithText(Tab, 'L1 张三'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'L2 李四'), findsOneWidget);
+  });
+
+  testWidgets('上线没有昵称时选项卡退回纯 L1/L2', (tester) async {
+    await _pumpTeamTab(
+      tester,
+      [_room(id: 11, status: 0, level: 1)],
+      user: {'id': '1', 'phone': '13800000001', 'level': 1},
+    );
+
+    expect(find.widgetWithText(Tab, 'L1'), findsOneWidget);
+    expect(find.widgetWithText(Tab, 'L2'), findsOneWidget);
   });
 
   testWidgets('切换 L2 选项卡只显示 L2 的房间', (tester) async {
@@ -182,8 +250,9 @@ void main() {
     expect(find.text('房间 R21'), findsOneWidget);
     expect(find.text('房间 R19'), findsOneWidget);
     expect(_top(tester, '房间 R21'), lessThan(_top(tester, '房间 R19')));
-    // 没有结束时间就明确提示，不假装有
-    expect(find.text('结束时间未记录'), findsNWidgets(2));
+    // 没有时间就明确提示，不假装有
+    expect(find.text('开始时间未记录'), findsNWidgets(2));
+    expect(find.text('完成时间未记录'), findsNWidgets(2));
   });
 
   testWidgets('未定级房间落进「其他」选项卡，不会凭空消失', (tester) async {
@@ -212,6 +281,95 @@ void main() {
     expect(find.text('房间 R40'), findsNothing);
   });
 
+  testWidgets('已结束房间：最先拿到贡献值的成员头像带皇冠', (tester) async {
+    tester.view.physicalSize = const Size(360, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    Map<String, dynamic> seat(int seatNo, String contribution) => {
+          'seatNo': seatNo,
+          'userId': '$seatNo',
+          'nickname': '成员$seatNo',
+          'avatar': null,
+          'phone': '138000000$seatNo',
+          'contribution': contribution,
+          'isSelf': false,
+          'isLeader': seatNo == 1,
+          'joinedAt': '2026-11-01T10:00:00Z',
+        };
+
+    final room = TeamRoom.fromJson({
+      'id': '12',
+      'roomNo': 'R12',
+      'status': 2,
+      'statusName': '已结束',
+      'round': 1,
+      'level': 1,
+      'leaderNickname': '成员1',
+      'memberCount': 3,
+      'rewardPool': '900',
+      'myPosition': 1,
+      'startedAt': '2026-11-01T02:00:00Z',
+      'endedAt': '2026-11-09T12:00:00Z',
+      // 座位 2 虽然后来的贡献值更高，但最早一条分红归座位 2 之外的人
+      'firstContributionUserId': '3',
+      'positions': [seat(1, '5'), seat(2, '9'), seat(3, '1')],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: kqwTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(child: RoomDetailView(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // 只有「最先拿到贡献值」的那一个座位带皇冠，不是贡献值最高的座位
+    expect(find.text('👑'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('未结束房间不加皇冠（后端也不会下发该标识）', (tester) async {
+    tester.view.physicalSize = const Size(360, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final room = TeamRoom.fromJson({
+      'id': '11',
+      'roomNo': 'R11',
+      'status': 0,
+      'statusName': '筹备中',
+      'round': 1,
+      'level': 1,
+      'memberCount': 1,
+      'rewardPool': '300',
+      'positions': [
+        {
+          'seatNo': 1,
+          'userId': '1',
+          'nickname': '成员1',
+          'contribution': '5',
+          'isSelf': false,
+          'isLeader': true,
+        },
+      ],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: kqwTheme,
+        home: Scaffold(
+          body: SingleChildScrollView(child: RoomDetailView(room: room)),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('👑'), findsNothing);
+  });
+
   testWidgets('接口失败给出错误态与重试，不白屏', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -230,8 +388,12 @@ void main() {
       ),
     );
 
+    final auth = await _authWithUser(null);
     await tester.pumpWidget(
-      MaterialApp(theme: kqwTheme, home: TeamTab(api: api)),
+      ChangeNotifierProvider<AuthProvider>.value(
+        value: auth,
+        child: MaterialApp(theme: kqwTheme, home: TeamTab(api: api)),
+      ),
     );
     for (var i = 0; i < 6; i++) {
       await tester.pump(const Duration(milliseconds: 20));

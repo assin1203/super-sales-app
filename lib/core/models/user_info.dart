@@ -15,6 +15,10 @@ class UserInfo {
     this.birthday,
     this.inviteCode,
     this.referredByPhone,
+    this.lv1ReferrerPhone,
+    this.lv2ReferrerPhone,
+    this.lv1ReferrerNickname,
+    this.lv2ReferrerNickname,
     this.status = 1,
     this.canInstall = false,
     this.createdAt,
@@ -44,6 +48,14 @@ class UserInfo {
   /// 推荐人手机号（后端已脱敏）
   final String? referredByPhone;
 
+  /// L1（200 档）/ L2（600 档）房间上线手机号：进对应档位房时绑定，后端已脱敏
+  final String? lv1ReferrerPhone;
+  final String? lv2ReferrerPhone;
+
+  /// L1 / L2 房间上线昵称：团队页选项卡「L1 张三」用；未绑定或对方无昵称为 null
+  final String? lv1ReferrerNickname;
+  final String? lv2ReferrerNickname;
+
   /// 账号状态：1 正常 / 0 停用
   final int status;
 
@@ -65,6 +77,10 @@ class UserInfo {
       birthday: json['birthday'] as String?,
       inviteCode: json['inviteCode'] as String?,
       referredByPhone: json['referredByPhone'] as String?,
+      lv1ReferrerPhone: json['lv1ReferrerPhone'] as String?,
+      lv2ReferrerPhone: json['lv2ReferrerPhone'] as String?,
+      lv1ReferrerNickname: json['lv1ReferrerNickname'] as String?,
+      lv2ReferrerNickname: json['lv2ReferrerNickname'] as String?,
       status: (json['status'] as num?)?.toInt() ?? 1,
       canInstall: json['canInstall'] as bool? ?? false,
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
@@ -82,6 +98,10 @@ class UserInfo {
         'birthday': birthday,
         'inviteCode': inviteCode,
         'referredByPhone': referredByPhone,
+        'lv1ReferrerPhone': lv1ReferrerPhone,
+        'lv2ReferrerPhone': lv2ReferrerPhone,
+        'lv1ReferrerNickname': lv1ReferrerNickname,
+        'lv2ReferrerNickname': lv2ReferrerNickname,
         'status': status,
         'canInstall': canInstall,
         if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
@@ -128,6 +148,10 @@ class UserInfo {
         birthday: birthday ?? this.birthday,
         inviteCode: inviteCode ?? this.inviteCode,
         referredByPhone: referredByPhone,
+        lv1ReferrerPhone: lv1ReferrerPhone,
+        lv2ReferrerPhone: lv2ReferrerPhone,
+        lv1ReferrerNickname: lv1ReferrerNickname,
+        lv2ReferrerNickname: lv2ReferrerNickname,
         status: status,
         // 后台装机开关不在资料编辑范围内，必须原样透传，否则保存资料后入口会消失
         canInstall: canInstall,
