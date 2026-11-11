@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../core/api/pos_api.dart';
 import '../core/api_client.dart';
+import '../core/auth_provider.dart';
 import '../core/models/machine.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
@@ -271,8 +273,12 @@ class _MachinesPageState extends State<MachinesPage> {
             const SizedBox(height: 10),
             if (a.contactName != null && a.contactName!.isNotEmpty)
               _infoItem(Icons.person_outline, '联系人', a.contactName!),
-            _infoItem(Icons.phone_iphone, '联系电话',
-                a.customerPhone.isEmpty ? '—' : a.customerPhone),
+            _infoItem(
+                Icons.phone_iphone,
+                '联系电话',
+                a.customerPhone.isEmpty
+                    ? '—'
+                    : revealOwnPhone(a.customerPhone, _selfPhone())),
             if (a.merchantName != null && a.merchantName!.isNotEmpty)
               _infoItem(Icons.storefront_outlined, '商户名称', a.merchantName!),
             _infoItem(Icons.people_outline, '使用人', a.useTypeName),
@@ -462,6 +468,9 @@ class _MachinesPageState extends State<MachinesPage> {
       ),
     );
   }
+
+  /// 本机登录号码：申请单电话由后端统一脱敏，匹配上就补全成本人完整号码
+  String? _selfPhone() => context.read<AuthProvider?>()?.user?.phone;
 
   Widget _infoItem(IconData icon, String label, String value) {
     return Padding(

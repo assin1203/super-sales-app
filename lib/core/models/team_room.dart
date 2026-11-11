@@ -60,6 +60,9 @@ class RoomPosition {
     return '${p.substring(0, 3)}****${p.substring(7)}';
   }
 
+  /// 座位上展示的手机号：本人用后端返回的明文，他人仍按脱敏样式
+  String get phoneText => isSelf ? (phone ?? '').trim() : displayPhone;
+
   /// 入房时间 `2025-12-23 13:39:24`；未知返回空串
   String get joinedAtText {
     final t = joinedAt;

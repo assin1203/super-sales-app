@@ -282,7 +282,7 @@ class _ProfilePageState extends State<ProfilePage> {
               leading: const Icon(Icons.phone_outlined, color: kqwPrimary),
               title: const Text('手机号'),
               subtitle: Text(
-                '${auth.maskedPhone ?? '-'} · 已绑定（更换请联系客服）',
+                '${auth.user?.phone ?? '-'} · 已绑定（更换请联系客服）',
                 style: const TextStyle(fontSize: 12),
               ),
             ),

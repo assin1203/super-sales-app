@@ -234,7 +234,7 @@ class RoomDetailView extends StatelessWidget {
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            seat.displayPhone.isEmpty ? '—' : seat.displayPhone,
+            seat.phoneText.isEmpty ? '—' : seat.phoneText,
             maxLines: 1,
             style: const TextStyle(color: Colors.white70, fontSize: 9.5),
           ),

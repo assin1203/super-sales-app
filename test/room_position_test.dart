@@ -26,6 +26,14 @@ void main() {
     expect(seat.displayPhone, '138****8001');
   });
 
+  test('本人座位展示完整号码，他人仍脱敏', () {
+    final self = parse({'userId': '7', 'phone': '13812348001', 'isSelf': true});
+    expect(self.phoneText, '13812348001');
+
+    final other = parse({'userId': '8', 'phone': '13812348001'});
+    expect(other.phoneText, '138****8001');
+  });
+
   test('空位：无手机号、无入房时间', () {
     final seat = parse({'userId': null});
     expect(seat.occupied, isFalse);

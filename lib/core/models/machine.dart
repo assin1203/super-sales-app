@@ -5,6 +5,21 @@
 
 import 'page_result.dart';
 
+/// 后端对申请单联系电话统一脱敏（`139****7777`）。脱敏值正好匹配本机登录号码时
+/// 用完整号码补全，让本人能看到自己的号；不匹配（别人的号）则原样返回。
+String revealOwnPhone(String masked, String? selfPhone) {
+  if (!masked.contains('*') || selfPhone == null || selfPhone.length < 7) {
+    return masked;
+  }
+  final parts = masked.split('*');
+  final head = parts.first;
+  final tail = parts.last;
+  if (head.isNotEmpty && selfPhone.startsWith(head) && selfPhone.endsWith(tail)) {
+    return selfPhone;
+  }
+  return masked;
+}
+
 /// 推荐人（手机号后端脱敏，仅暴露等级）
 class MachineReferrer {
   const MachineReferrer({required this.phone, required this.level});
