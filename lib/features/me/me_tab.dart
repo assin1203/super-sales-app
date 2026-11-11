@@ -115,83 +115,88 @@ class _MeTabState extends State<MeTab> {
           // 装饰圆（科技感点缀）
           Positioned(top: -40, right: -30, child: _circle(160)),
           Positioned(bottom: -40, left: -40, child: _circle(140)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 28, 16, 20),
-            child: Column(
-              children: [
-                // 点用户信息区进入「修改个人资料」
-                InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: () => context.push('/profile'),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Colors.white.withValues(alpha: 0.22),
-                        child: _avatar(auth, 60),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(auth.name ?? '未登录',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.white)),
-                                ),
-                                const Icon(Icons.edit,
-                                    size: 15, color: Colors.white70),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color:
-                                        Colors.white.withValues(alpha: 0.22),
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                      '${auth.user?.levelLabel ?? 'L0'} 会员',
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w500)),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            InkWell(
-                              borderRadius: BorderRadius.circular(8),
-                              onTap: () => _copyInviteCode(inviteCode),
-                              child: Row(
+          // 渐变铺到状态栏后面，内容用 SafeArea 下移，避免被系统状态栏压住
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 28, 16, 20),
+              child: Column(
+                children: [
+                  // 点用户信息区进入「修改个人资料」
+                  InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () => context.push('/profile'),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Colors.white.withValues(alpha: 0.22),
+                          child: _avatar(auth, 60),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
-                                  Text(
-                                      inviteCode.isEmpty
-                                          ? '推广码生成中'
-                                          : '邀请码 $inviteCode',
-                                      style: const TextStyle(
-                                          fontSize: 13, color: Colors.white70)),
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.copy_rounded,
-                                      size: 14, color: Colors.white70),
+                                  Flexible(
+                                    child: Text(auth.name ?? '未登录',
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.white)),
+                                  ),
+                                  const Icon(Icons.edit,
+                                      size: 15, color: Colors.white70),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.22),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                        '${auth.user?.levelLabel ?? 'L0'} 会员',
+                                        style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500)),
+                                  ),
                                 ],
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              InkWell(
+                                borderRadius: BorderRadius.circular(8),
+                                onTap: () => _copyInviteCode(inviteCode),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                        inviteCode.isEmpty
+                                            ? '推广码生成中'
+                                            : '邀请码 $inviteCode',
+                                        style: const TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.white70)),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.copy_rounded,
+                                        size: 14, color: Colors.white70),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 24),
-                _pointsCard(context),
-              ],
+                  const SizedBox(height: 24),
+                  _pointsCard(context),
+                ],
+              ),
             ),
           ),
         ],
@@ -220,7 +225,8 @@ class _MeTabState extends State<MeTab> {
     final bytes = auth.avatarBytes;
     if (bytes != null) {
       return ClipOval(
-        child: Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
+        child:
+            Image.memory(bytes, width: size, height: size, fit: BoxFit.cover),
       );
     }
     return Image.asset('assets/avatar.jpeg', width: size - 8, height: size - 8);
@@ -245,9 +251,7 @@ class _MeTabState extends State<MeTab> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: const [
             BoxShadow(
-                color: Color(0x1AE53935),
-                blurRadius: 24,
-                offset: Offset(0, 10))
+                color: Color(0x1AE53935), blurRadius: 24, offset: Offset(0, 10))
           ],
         ),
         child: Column(
@@ -259,8 +263,8 @@ class _MeTabState extends State<MeTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text('可用积分',
-                        style: TextStyle(
-                            fontSize: 13, color: kqwTextSecondary)),
+                        style:
+                            TextStyle(fontSize: 13, color: kqwTextSecondary)),
                     const SizedBox(height: 6),
                     Text(_points.balance,
                         style: const TextStyle(
@@ -318,8 +322,7 @@ class _MeTabState extends State<MeTab> {
                     color: Color(0xFF1F2430))),
             const SizedBox(height: 4),
             Text(label,
-                style:
-                    const TextStyle(fontSize: 12, color: kqwTextSecondary)),
+                style: const TextStyle(fontSize: 12, color: kqwTextSecondary)),
           ],
         ),
       );
@@ -339,8 +342,7 @@ class _MeTabState extends State<MeTab> {
           Row(
             children: [
               const Text('我的订单',
-                  style:
-                      TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
               const Spacer(),
               InkWell(
                 onTap: () => context.push('/orders'),
@@ -349,7 +351,8 @@ class _MeTabState extends State<MeTab> {
                     Text('查看全部订单',
                         style:
                             TextStyle(fontSize: 13, color: kqwTextSecondary)),
-                    Icon(Icons.chevron_right, size: 16, color: kqwTextSecondary),
+                    Icon(Icons.chevron_right,
+                        size: 16, color: kqwTextSecondary),
                   ],
                 ),
               ),
@@ -409,11 +412,10 @@ class _MeTabState extends State<MeTab> {
       _GridEntry(Icons.qr_code, '推荐海报', () => context.push('/referral')),
       _GridEntry(Icons.location_on, '收货地址', () => context.push('/addresses')),
       _GridEntry(Icons.card_giftcard, '积分礼包', () => context.push('/packages')),
-      _GridEntry(
-          Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
+      _GridEntry(Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
       if (canInstall)
-        _GridEntry(Icons.install_desktop, '安装POS',
-            () => context.push('/machine/add')),
+        _GridEntry(
+            Icons.install_desktop, '安装POS', () => context.push('/machine/add')),
     ];
 
     final rows = <Widget>[];
@@ -476,7 +478,8 @@ class _MeTabState extends State<MeTab> {
   Widget _settingsCard(BuildContext context) {
     return Column(
       children: [
-        _tile(context, Icons.lock_outline, '修改密码', () => context.push('/password')),
+        _tile(context, Icons.lock_outline, '修改密码',
+            () => context.push('/password')),
         const Divider(height: 1, indent: 56),
         _tile(context, Icons.system_update_alt, '检查更新', _checkUpdate),
         const Divider(height: 1, indent: 56),
@@ -514,14 +517,15 @@ class _MeTabState extends State<MeTab> {
     );
   }
 
-  Widget _tile(BuildContext context, IconData icon, String title,
-      VoidCallback onTap,
+  Widget _tile(
+      BuildContext context, IconData icon, String title, VoidCallback onTap,
       {bool red = false}) {
     final color = red ? const Color(0xFFE5484D) : const Color(0xFF1F2430);
     return ListTile(
       leading: Icon(icon, color: color),
       title: Text(title, style: TextStyle(color: color)),
-      trailing: const Icon(Icons.chevron_right, size: 20, color: kqwTextSecondary),
+      trailing:
+          const Icon(Icons.chevron_right, size: 20, color: kqwTextSecondary),
       onTap: onTap,
     );
   }
