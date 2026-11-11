@@ -229,6 +229,33 @@ class MachineApplyResult {
       );
 }
 
+/// 使用人手机号验证结果（POST /pos/apply/verify-phone）
+///
+/// [registered] 为 true 表示该号码此前没注册，服务端已自动建号并把推广人绑到当前登录用户。
+class ApplyPhoneVerifyResult {
+  const ApplyPhoneVerifyResult({
+    required this.verified,
+    required this.registered,
+    required this.phone,
+    this.userId = '',
+  });
+
+  final bool verified;
+
+  /// true = 号码未注册，本次已自动建号（推广人 = 当前用户）
+  final bool registered;
+  final String phone;
+  final String userId;
+
+  factory ApplyPhoneVerifyResult.fromJson(Map<String, dynamic> json) =>
+      ApplyPhoneVerifyResult(
+        verified: json['verified'] == true,
+        registered: json['registered'] == true,
+        phone: json['phone'] as String? ?? '',
+        userId: '${json['userId'] ?? ''}',
+      );
+}
+
 /// 品牌下拉项（GET /pos/brands，后台可配，仅下发启用项）
 class PosBrandOption {
   const PosBrandOption({required this.id, required this.name, this.logo = ''});

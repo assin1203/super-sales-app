@@ -222,6 +222,21 @@ class PosApi {
     return MachineApplyResult.fromJson(json);
   }
 
+  /// 验证「他人使用」的使用人手机号（`POST /pos/apply/verify-phone`）
+  ///
+  /// 验证码先由 `/common/sms/send` 下发；校验通过后服务端写 10 分钟有效的标记，
+  /// 号码未注册时自动建号并把推广人绑到当前登录用户，`useType=2` 的申请提交时才放行。
+  Future<ApplyPhoneVerifyResult> verifyApplyPhone({
+    required String phone,
+    required String code,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/pos/apply/verify-phone',
+      body: {'phone': phone, 'code': code},
+    );
+    return ApplyPhoneVerifyResult.fromJson(json);
+  }
+
   /// 新手任务提交审核（成功后后端置「审核中」，返回新状态供页面就地更新）
   Future<NewbieSubmitResult> submitNewbie(String sn) async {
     final json = await _api.post<Map<String, dynamic>>(

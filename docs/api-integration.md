@@ -43,6 +43,7 @@
 | 地址 | `GET/POST /user/addresses`、`PUT/DELETE /user/addresses/{id}`、`POST /user/addresses/{id}/default` | `address_api.dart` | `addresses_page.dart` |
 | 机器 | `GET /pos/machines`、`GET /pos/machines/{sn}` | `pos_api.dart` | `machines_page.dart`、首页达标卡 |
 | 机器 | `POST /pos/apply`（`proofImages` 装机凭证截图 URL 数组 ≤4 张，选填，先调 `POST /common/upload/image`；说明见 `install_guide_page.dart`）、`POST /pos/newbie/submit` | `pos_api.dart` | `apply_machine_page.dart` 装机申请（首页入口，凭证截图区在申请信息下方）、`machines_page.dart` 新手机器提交 |
+| 机器 | `POST /pos/apply/verify-phone`（他人使用先验证使用人手机号：校验验证码 → 号码未注册则自动建号并把当前用户绑为推广人 → 写 10 分钟有效标记，`POST /pos/apply` 提交时消费；错码/过期 400） | `pos_api.dart#verifyApplyPhone` | `apply_machine_page.dart` 他人使用（发码前先过拼图滑块） |
 | 机器 | `GET /pos/applies`（`status`/`source` 筛选） | `pos_api.dart#applies` | `machines_page.dart`「已提交」列表 |
 | 机器 | `POST /pos/applies/{id}/install`（`installMode` 1 平台安装 / 2 用户自装；补录 `bootTime`/`contactName`/`merchantName`/`region`/`address`/`remark`/`trafficFeeRemark`；后端 `proofImages` 字段保留，App 不再上传） | `pos_api.dart#installApply` | `machines_page.dart` 已通过申请「立即装机」、`add_machine_page.dart` 装机页（先查到 `applyId` 再调它） |
 | 机器 | `GET /pos/applies/pending-by-phone`（按手机号查待装机申请，返回 `PendingInstallPreview`：0 条给提示、1 条直接装、多条弹选择） | `pos_api.dart#pendingAppliesByPhone` | `add_machine_page.dart`「安装 POS 机」第一步 |

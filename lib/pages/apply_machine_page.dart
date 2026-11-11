@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart' show DioMediaType;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../core/api/common_api.dart';
 import '../core/api/pos_api.dart';
 import '../core/api_client.dart';
 import '../core/auth_provider.dart';
 import '../core/models/machine.dart';
+import '../core/slider_captcha.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
 import '../core/widgets/region_picker.dart';
@@ -46,6 +50,18 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
 
   /// 使用人标记：1 自己用（默认）/ 2 他人用
   int _useType = 1;
+
+  /// 他人使用：使用人手机号收到的验证码（发码前要先过拼图滑块）
+  final _codeCtrl = TextEditingController();
+  Timer? _timer;
+  int _countdown = 0;
+  bool _sending = false;
+
+  /// 已经验证通过的号码：同一次停留里重试提交不必再消耗一次验证码
+  String _verifiedPhone = '';
+
+  /// 本次提交是否触发了「号码未注册 → 自动建号」，用于给用户一句说明
+  bool _autoRegistered = false;
 
   /// 「自己用」时是否已用本人信息预填过，避免覆盖用户手填内容
   bool _selfPrefilled = false;
@@ -91,7 +107,12 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
 
   void _selectUseType(int value) {
     if (_useType == value) return;
-    setState(() => _useType = value);
+    setState(() {
+      _useType = value;
+      // 换使用人后号码变了，已发的验证码和已验证状态都不再适用
+      _codeCtrl.clear();
+      _verifiedPhone = '';
+    });
     if (value == 1) {
       _fillSelfInfo();
     } else {
@@ -101,8 +122,10 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
 
   @override
   void dispose() {
+    _timer?.cancel();
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
+    _codeCtrl.dispose();
     _addressCtrl.dispose();
     _remarkCtrl.dispose();
     super.dispose();
@@ -122,17 +145,110 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
     return null;
   }
 
+  /// 发送使用人验证码：先过拼图滑块，再起 60s 倒计时（与服务端冷却对齐）
+  Future<void> _sendCode() async {
+    if (_sending || _countdown > 0) return;
+    final phoneError = _validatePhone(_phoneCtrl.text);
+    if (phoneError != null) {
+      showToast(context, phoneError);
+      return;
+    }
+    final passed = await _verifySlider();
+    if (passed != true || !mounted) return;
+    setState(() => _sending = true);
+    try {
+      await commonApi.sendSms(_phoneCtrl.text.trim());
+      if (!mounted) return;
+      showToast(context, '验证码已发送，5 分钟内有效');
+      _startCountdown();
+    } on ApiException catch (e) {
+      if (mounted) showToast(context, e.displayMessage);
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// 拼图滑块：通过返回 true，取消返回 null
+  Future<bool?> _verifySlider() {
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.only(bottom: 10),
+                child: Text('安全验证（滑动完成拼图）',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              ),
+              SliderCaptcha(
+                onComplete: () {
+                  // 通过后略停一拍再收起，让用户看到"验证成功"
+                  Future<void>.delayed(const Duration(milliseconds: 260), () {
+                    if (ctx.mounted) Navigator.of(ctx).pop(true);
+                  });
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startCountdown() {
+    _timer?.cancel();
+    setState(() => _countdown = 60);
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) {
+        t.cancel();
+        return;
+      }
+      setState(() => _countdown--);
+      if (_countdown <= 0) t.cancel();
+    });
+  }
+
+  /// 他人使用：提交前先验证使用人号码（同一号码本次停留内只验一次）
+  Future<void> _ensurePhoneVerified(String phone) async {
+    if (_verifiedPhone == phone) return;
+    final res = await _api.verifyApplyPhone(
+      phone: phone,
+      code: _codeCtrl.text.trim(),
+    );
+    _verifiedPhone = res.phone.isEmpty ? phone : res.phone;
+    _autoRegistered = res.registered;
+    if (mounted) {
+      showToast(
+        context,
+        res.registered
+            ? '使用人号码未注册，已自动注册并绑定为你的下级'
+            : '使用人手机号验证通过',
+      );
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
     FocusScope.of(context).unfocus();
     setState(() => _submitting = true);
     try {
+      final phone = _phoneCtrl.text.trim();
+      // 他人使用：先验码（未注册则服务端自动建号并绑推广人），过了才提交申请
+      if (_useType == 2) await _ensurePhoneVerified(phone);
       // 先逐张上传换 URL：任一张失败即中止，避免「申请提交了但凭证丢了」
       final proofUrls = await _uploadProofs();
       final MachineApplyResult result = await _api.apply(
         contactName: _nameCtrl.text.trim(),
-        phone: _phoneCtrl.text.trim(),
+        phone: phone,
         useType: _useType,
         region: _region,
         address: _addressCtrl.text.trim(),
@@ -144,7 +260,12 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
       showToast(context, '申请$status，可在「我的机器」查看进度；装多台可再次提交');
       Navigator.of(context).pop(true);
     } on ApiException catch (e) {
-      if (mounted) showToast(context, e.displayMessage);
+      if (!mounted) return;
+      // 号码已自动注册但申请没提成：明确告知，避免用户以为白填了
+      showToast(
+        context,
+        _autoRegistered ? '使用人号码已自动注册；${e.displayMessage}' : e.displayMessage,
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -202,6 +323,8 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
                       : '使用人常用号码，用于装机联系'),
                 ),
               ),
+              if (_useType == 2)
+                _labeled('使用人验证码', required: true, child: _codeField()),
               _labeled(
                 '所在地区',
                 child: RegionPickerField(
@@ -309,6 +432,62 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
             ),
         ],
       ),
+    );
+  }
+
+  // ---------- 他人使用：使用人手机号验证码 ----------
+
+  /// 验证码输入 + 获取验证码（60s 倒计时；发码前必须先过拼图滑块）
+  Widget _codeField() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _codeCtrl,
+                keyboardType: TextInputType.number,
+                textInputAction: TextInputAction.next,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                validator: (v) => RegExp(r'^\d{6}$').hasMatch((v ?? '').trim())
+                    ? null
+                    : '请输入 6 位验证码',
+                decoration: _inputDecoration('使用人手机收到的 6 位验证码'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              height: 46,
+              child: OutlinedButton(
+                onPressed: (_sending || _countdown > 0) ? null : _sendCode,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                child: Text(
+                  _sending
+                      ? '发送中'
+                      : (_countdown > 0 ? '${_countdown}s 后重发' : '获取验证码'),
+                  style: const TextStyle(fontSize: 12),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          '验证通过后才提交申请；号码未注册会自动注册并绑定为你的下级',
+          style: TextStyle(fontSize: 11, color: Colors.black45),
+        ),
+      ],
     );
   }
 
