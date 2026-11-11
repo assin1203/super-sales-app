@@ -109,7 +109,17 @@ class AuthProvider extends ChangeNotifier {
 
   /// 手机号 + 密码登录。失败抛 [ApiException]（401 → 「手机号或密码错误」）
   Future<void> loginPassword(String phone, String password) async {
-    final res = await _users.login(phone, password);
+    await _saveSession(await _users.login(phone, password));
+  }
+
+  /// 短信验证码登录（验证码先由 `commonApi.sendSms` 下发）。
+  /// 失败抛 [ApiException]：20001 → 「该手机号未注册，请先注册」，400 → 验证码错误或已过期
+  Future<void> loginCode(String phone, String code) async {
+    await _saveSession(await _users.loginByCode(phone, code));
+  }
+
+  /// 登录成功后的统一写入：内存态 + 本地存储 + 注入 token
+  Future<void> _saveSession(LoginResult res) async {
     _user = res.user;
     _loggedIn = true;
     _accessToken = res.accessToken;

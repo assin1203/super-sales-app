@@ -63,12 +63,27 @@ class UserApi {
       '/user/login',
       body: {'phone': phone, 'password': password},
     );
-    return LoginResult(
-      accessToken: json['accessToken'] as String? ?? '',
-      refreshToken: json['refreshToken'] as String? ?? '',
-      user: UserInfo.fromJson((json['user'] as Map).cast<String, dynamic>()),
-    );
+    return _loginResult(json);
   }
+
+  /// 短信验证码登录（公开端点，验证码先由 `/common/sms/send` 下发）
+  ///
+  /// 未注册 → 20001「该手机号未注册，请先注册」；验证码错误/过期 → 400；
+  /// 失败次数过多 → 429（服务端作废该验证码，需重新获取）
+  Future<LoginResult> loginByCode(String phone, String code) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/user/login/code',
+      body: {'phone': phone, 'code': code},
+    );
+    return _loginResult(json);
+  }
+
+  /// 两种登录方式返回同一个结构（access + refresh + user）
+  LoginResult _loginResult(Map<String, dynamic> json) => LoginResult(
+        accessToken: json['accessToken'] as String? ?? '',
+        refreshToken: json['refreshToken'] as String? ?? '',
+        user: UserInfo.fromJson((json['user'] as Map).cast<String, dynamic>()),
+      );
 
   /// 注册（公开端点）：手机号已存在 → 409，推广码无效 → 400
   Future<RegisterResult> register(

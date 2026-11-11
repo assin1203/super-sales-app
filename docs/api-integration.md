@@ -20,6 +20,7 @@
 | 模块 | 端点 | 封装 | 使用位置 |
 | --- | --- | --- | --- |
 | 认证 | `POST /user/login` | `user_api.dart#login` | `login_page.dart` |
+| 认证 | `POST /user/login/code`（手机号 + 短信验证码，验证码先调 `POST /common/sms/send`；未注册 → 20001「请先注册」，验证码错/过期 → 400，失败过多 → 429） | `user_api.dart#loginByCode` | `login_page.dart` 验证码登录形态 |
 | 认证 | `POST /user/register` | `user_api.dart#register` | 仅 service 层保留（注册页未做） |
 | 认证 | `POST /user/refresh` | `user_api.dart#refresh` | `auth_provider.dart` 静默续期 / 401 重放 |
 | 认证 | `POST /user/logout` | `user_api.dart#logout` | `me_tab.dart` 退出登录 |
