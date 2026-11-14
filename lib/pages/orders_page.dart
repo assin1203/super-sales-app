@@ -191,54 +191,86 @@ class _OrdersPageState extends State<OrdersPage> {
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFFFFEBEE), Color(0xFFFFCDD2)]),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child: Icon(
-                    o.isVirtual
-                        ? Icons.card_giftcard_outlined
-                        : Icons.shopping_bag_outlined,
-                    size: 22,
-                    color: kqwPrimary,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(o.productName,
+            // 发货后（实物单已发货/已完成）只展示订单号 + 快递公司/单号，其余信息隐藏
+            if (o.fulfilled)
+              Row(
+                children: [
+                  const Icon(Icons.local_shipping_outlined,
+                      size: 20, color: kqwPrimary),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${o.expressCompany ?? ''} ${o.expressNo}'.trim(),
                           style: const TextStyle(
                               fontWeight: FontWeight.w600, fontSize: 15),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${formatShortTime(o.createdAt)} · 数量 ${o.buyCount}',
-                        style:
-                            const TextStyle(fontSize: 12, color: Colors.black45),
-                      ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          o.shippedAt == null
+                              ? '已发货'
+                              : '发货时间 ${formatShortTime(o.shippedAt)}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black45),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+            else
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                          colors: [Color(0xFFFFEBEE), Color(0xFFFFCDD2)]),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
+                    child: Icon(
+                      o.isVirtual
+                          ? Icons.card_giftcard_outlined
+                          : Icons.shopping_bag_outlined,
+                      size: 22,
+                      color: kqwPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(o.productName,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, fontSize: 15),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${formatShortTime(o.createdAt)} · 数量 ${o.buyCount}',
+                          style: const TextStyle(
+                              fontSize: 12, color: Colors.black45),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(o.pointsCost, style: pointsTextStyle(size: 16)),
+                      const Text('积分',
+                          style: TextStyle(fontSize: 11, color: Colors.black45)),
                     ],
                   ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(o.pointsCost, style: pointsTextStyle(size: 16)),
-                    const Text('积分',
-                        style: TextStyle(fontSize: 11, color: Colors.black45)),
-                  ],
-                ),
-              ],
-            ),
+                ],
+              ),
             if (o.cancellable || o.confirmable) ...[
               const SizedBox(height: 10),
               Row(
