@@ -24,14 +24,14 @@
 | 认证 | `POST /user/register` | `user_api.dart#register` | 仅 service 层保留（注册页未做） |
 | 认证 | `POST /user/refresh` | `user_api.dart#refresh` | `auth_provider.dart` 静默续期 / 401 重放 |
 | 认证 | `POST /user/logout` | `user_api.dart#logout` | `me_tab.dart` 退出登录 |
-| 资料 | `GET /user/me` | `user_api.dart#me` | `auth_provider.dart#loadProfile` → 首页/我的/资料页；`lv1ReferrerNickname` / `lv2ReferrerNickname` 是 L1/L2 房间上线昵称（团队页选项卡「L1 张三」） |
+| 资料 | `GET /user/me` | `user_api.dart#me` | `auth_provider.dart#loadProfile` → 首页/我的/资料页；`lv1ReferrerNickname` / `lv2ReferrerNickname` 是 **L1/L2 等级推荐人**昵称——沿推荐链由近及远第一个等级达标的上级（未达标则不绑），与贡献值命中的「有房上线」解耦（团队页选项卡「L1 张三」） |
 | 资料 | `PUT /user/profile` | `user_api.dart#updateProfile` | `profile_page.dart` 保存昵称/头像 |
 | 资料 | `PUT /user/password` | `user_api.dart#changePassword` | `password_page.dart`（成功后强制重登） |
 | 推广 | `GET /user/invite` | `user_api.dart#invite` | `referral_page.dart` |
 | 推广 | `GET /user/invite/records` | `user_api.dart#inviteRecords` | `referral_page.dart` 下级明细 |
 | 推广 | `GET /user/ancestors` | `user_api.dart#ancestors` | 已封装，暂无页面消费 |
 | 积分 | `GET /user/points` | `points_api.dart#summary`（另有 `user_api.dart#points` 同端点封装，无调用方） | `me_tab.dart`、`mall_tab.dart`、`home_tab.dart` 余额 |
-| 积分 | `GET /points/flows` | `points_api.dart#flows` | `points_flow_page.dart`（类型筛选 + 分页） |
+| 积分 | `GET /points/flows` | `points_api.dart#flows` | `points_flow_page.dart`（类型筛选 + 分页）；`flowType` 1~11（11 = 会员互赠）。入房费分成 `ENTRY_REFERRAL` 后端尚未映射，暂归入 10「其他」，映射定稿后要同步筛选项 |
 | 积分 | `GET /points/packages` | `points_api.dart#packages` | `home_tab.dart`、`packages_page.dart` |
 | 积分 | `POST /points/packages/{id}/order` | `points_api.dart#createPackageOrder` | 同上，下单后提示待接支付 SDK |
 | 商城 | `GET /mall/products` | `mall_api.dart#products` | `mall_tab.dart`（等级池/虚拟权益分栏） |
@@ -55,7 +55,7 @@
 | 积分 | `POST /points/transfers`（会员互赠：扣转出方 → 加接收方，双方各留流水） | `points_api.dart#transfer` | `points_transfer_page.dart` 积分转让 |
 | 团队 | `GET /team/rooms`、`GET /team/rooms/{id}`、`GET /team/rooms/{id}/members`（房间 VO 另含 `startedAt` 开始时间、`endedAt` 完成时间——优先归档时间 `room.last_dividend_at`、缺失回落末次分红时间、都没有为 null、`firstContributionUserId` 最先拿到贡献值的成员 userId，已结束房间座位据此加皇冠） | `team_api.dart` | `team_tab.dart`、`room_detail_page.dart` |
 | 团队 | `GET /team/room-packages`（档位列表，按 `sort` 升序） | `team_api.dart#roomPackages` | `home_tab.dart` 房间档位卡 |
-| 团队 | `POST /team/rooms/enter`（`packageId` 选填，缺省默认档；回执含 `entryPoints`/`purchased`/`uplineId`/`rebound`） | `team_api.dart#enterRoom` | `enter_room_flow.dart`（首页/团队页共用） |
+| 团队 | `POST /team/rooms/enter`（`packageId` 选填，缺省默认档；回执含 `entryPoints`/`purchased`/`uplineId`/`rebound`）。**入房顺序**：600 档（`ADVANCED`/lv2）要求先进入过 200 档（`BASIC`/lv1）房间，判据是 `room_op_log` 的 OCCUPY 记录（看是否真进过，不看 `user.level`），不满足 → 400 + `43005`「请先进入 200 档房间，再进入 600 档房间」；**入房费分成**：本次真扣了入房费时按 50% 分给等级推荐人，已购档位复用资格（`entryPoints=0`）不分成；`uplineId` 仍是贡献值命中者，与等级推荐人解耦 | `team_api.dart#enterRoom` | `enter_room_flow.dart`（首页/团队页共用；`room_package.dart#needsBasicRoomFirst` 提前提示顺序要求） |
 | 团队 | `GET /team/wait-queue` | `team_api.dart#waitQueue` | `team_tab.dart` 候补队列 |
 | 首页 | `GET /home/banners` | `home_api.dart#banners` | `home_tab.dart` 轮播（空则回落本地图） |
 | 支付 | `POST /payment/order`、`GET /payment/order/{id}` | `payment_api.dart` | 已封装，收银台待接 SDK |
