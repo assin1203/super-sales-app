@@ -36,6 +36,20 @@ class RoomPackage {
   /// 已购用户进房不再扣积分，前端据此放行积分不足的情况，并显示「已完成升级」。
   final bool purchased;
 
+  /// 档位 code → 房间等级，与后端 `ROOM_LEVEL_BY_PACKAGE_CODE` 对齐：
+  /// `BASIC` = 200 档（lv1）、`ADVANCED` = 600 档（lv2）。新增档位要同步这里。
+  static const Map<String, int> _levelByCode = {
+    'BASIC': 1,
+    'ADVANCED': 2,
+  };
+
+  /// 房间等级：200 档 = 1、600 档 = 2；未知档位为 null
+  int? get roomLevel => _levelByCode[code];
+
+  /// 600 档（lv2）房间：后端要求先进入过 200 档房间，不允许跳档（错误码 43005）。
+  /// 前端只能提前提示，是否满足资格由后端按 `room_op_log` 判定。
+  bool get needsBasicRoomFirst => (roomLevel ?? 1) > 1;
+
   factory RoomPackage.fromJson(Map<String, dynamic> json) => RoomPackage(
         id: '${json['id'] ?? ''}',
         code: json['code'] as String? ?? '',

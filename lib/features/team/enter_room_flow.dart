@@ -131,18 +131,23 @@ class _EnterRoomDialogState extends State<_EnterRoomDialog> {
   }
 
   String _content(RoomPackage pkg, int? balance, int lack) {
+    // 600 档房间后端要求先进入过 200 档房间（不允许跳档），提前说明，
+    // 避免用户填完确认才收到 43005 的报错提示
+    final order = pkg.needsBasicRoomFirst
+        ? '\n注意：600 档房间需先进入过 200 档房间，未进过将被服务端拒绝。'
+        : '';
     if (_blocked) {
       return '「${pkg.name}」档位入房需 ${pkg.entryPoints} 积分，'
           '当前可用积分 $balance，还差 $lack 积分。\n'
-          '请先到积分中心获取积分后再进入房间。';
+          '请先到积分中心获取积分后再进入房间。$order';
     }
     if (pkg.purchased) {
       return '您已购买「${pkg.name}」档位礼包，本次进房不再扣积分。'
-          '${balance != null ? '\n当前可用积分：$balance。' : ''}';
+          '${balance != null ? '\n当前可用积分：$balance。' : ''}$order';
     }
     return '「${pkg.name}」档位入房需消耗 ${pkg.entryPoints} 积分；'
         '首次进入会购买该档位礼包（终身一次），之后进房不再扣积分。'
-        '${balance != null ? '\n当前可用积分：$balance。' : ''}';
+        '${balance != null ? '\n当前可用积分：$balance。' : ''}$order';
   }
 }
 
@@ -180,8 +185,17 @@ Future<EnterRoomResult?> pickPackageAndEnter(
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(pkg.name,
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(pkg.name,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (pkg.needsBasicRoomFirst)
+                          const Text('需先进入过 200 档房间',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.black45)),
+                      ],
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Text('${pkg.entryPoints} 积分', style: pointsTextStyle()),
