@@ -104,6 +104,7 @@ void main() {
     '/machines',
     '/machine/add',
     '/machine/apply',
+    '/forgot-password',
     '/room/1',
   ];
 

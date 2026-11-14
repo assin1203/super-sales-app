@@ -9,6 +9,7 @@ import '../features/team/team_tab.dart';
 import '../pages/add_machine_page.dart';
 import '../pages/addresses_page.dart';
 import '../pages/apply_machine_page.dart';
+import '../pages/forgot_password_page.dart';
 import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
 import '../pages/orders_page.dart';
@@ -36,6 +37,11 @@ GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey})
       GoRoute(
         path: '/login',
         builder: (context, state) => const LoginPage(),
+      ),
+      // 忘记密码：登录页「忘记密码？」进入，未登录可用
+      GoRoute(
+        path: '/forgot-password',
+        builder: (context, state) => const ForgotPasswordPage(),
       ),
       ShellRoute(
         builder: (context, state, child) => ShellLayout(child: child),

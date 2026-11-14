@@ -188,6 +188,20 @@ class UserApi {
         '/user/password',
         body: {'oldPassword': oldPassword, 'newPassword': newPassword},
       );
+
+  /// 忘记密码：手机号 + 短信验证码重置（公开端点，无需登录）。
+  ///
+  /// 验证码由 [CommonApi.sendSms] 下发；服务端校验通过即消费，
+  /// 成功后撤销该账号旧 refresh（必须用新密码重新登录）。
+  Future<void> resetPassword({
+    required String phone,
+    required String code,
+    required String newPassword,
+  }) =>
+      _api.postVoid(
+        '/user/password/reset',
+        body: {'phone': phone, 'code': code, 'newPassword': newPassword},
+      );
 }
 
 final UserApi userApi = UserApi();

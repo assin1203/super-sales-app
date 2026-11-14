@@ -283,7 +283,7 @@ class _LoginPageState extends State<LoginPage> {
         Align(
           alignment: Alignment.centerRight,
           child: TextButton(
-            onPressed: () => showToast(context, '请联系管理员重置密码'),
+            onPressed: () => context.push('/forgot-password'),
             child: const Text('忘记密码？', style: TextStyle(fontSize: 13)),
           ),
         ),
