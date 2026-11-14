@@ -405,8 +405,8 @@ class _MeTabState extends State<MeTab> {
     final canInstall = context.watch<AuthProvider>().user?.canInstall ?? false;
 
     final entries = <_GridEntry>[
-      _GridEntry(Icons.account_tree, '我的团队', () => context.push('/team')),
-      _GridEntry(Icons.task_alt, '任务中心', () => context.push('/tasks')),
+      _GridEntry(Icons.account_tree, '我的队伍', () => context.push('/team')),
+      _GridEntry(Icons.group, '我的团队', () => context.push('/my-team')),
       _GridEntry(Icons.savings, '积分中心', () => context.push('/points')),
       _GridEntry(Icons.point_of_sale, '我的机器', () => context.push('/machines')),
       _GridEntry(Icons.qr_code, '推荐海报', () => context.push('/referral')),

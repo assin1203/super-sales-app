@@ -108,6 +108,7 @@ void main() {
     '/settings',
     '/trade-password',
     '/phone/rebind',
+    '/my-team',
     '/room/1',
   ];
 

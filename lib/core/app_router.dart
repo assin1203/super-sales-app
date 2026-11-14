@@ -24,6 +24,7 @@ import '../pages/room_detail_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/trade_password_page.dart';
 import '../pages/phone_rebind_page.dart';
+import '../pages/my_team_page.dart';
 import 'auth_provider.dart';
 import 'shell_layout.dart';
 
@@ -80,6 +81,8 @@ GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey})
       GoRoute(
           path: '/phone/rebind',
           builder: (c, s) => const PhoneRebindPage()),
+      GoRoute(
+          path: '/my-team', builder: (c, s) => const MyTeamPage()),
       GoRoute(
         path: '/room/:roomId',
         builder: (c, s) => RoomDetailPage(roomId: s.pathParameters['roomId']!),
