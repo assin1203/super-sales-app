@@ -88,6 +88,7 @@ class PosApi {
     String? address,
     String? remark,
     String? trafficFeeRemark,
+    String? idTail,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/pos/applies/$applyId/install',
@@ -103,6 +104,7 @@ class PosApi {
         address: address,
         remark: remark,
         trafficFeeRemark: trafficFeeRemark,
+        idTail: idTail,
       ),
     );
     return MachineApply.fromJson(json);
@@ -125,6 +127,7 @@ class PosApi {
     String? address,
     String? remark,
     String? trafficFeeRemark,
+    String? idTail,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/pos/applies/install',
@@ -142,6 +145,7 @@ class PosApi {
           address: address,
           remark: remark,
           trafficFeeRemark: trafficFeeRemark,
+          idTail: idTail,
         ),
       },
     );
@@ -161,6 +165,7 @@ class PosApi {
     String? address,
     String? remark,
     String? trafficFeeRemark,
+    String? idTail,
   }) {
     String? filled(String? value) =>
         (value != null && value.isNotEmpty) ? value : null;
@@ -176,7 +181,34 @@ class PosApi {
       if (filled(address) != null) 'address': address,
       if (filled(remark) != null) 'remark': remark,
       if (filled(trafficFeeRemark) != null) 'trafficFeeRemark': trafficFeeRemark,
+      if (filled(idTail) != null) 'idTail': idTail!.trim().toUpperCase(),
     };
+  }
+
+  /// 扫机号查机具档案（`GET /pos/machines/{sn}/info`）
+  ///
+  /// 装机页扫码后调用：命中台账即回填品牌/类型/型号，业务员不用手填；
+  /// 查不到不抛异常，用 `found=false` 判断（此时页面保持手选品牌/类型）。
+  Future<PosMachineProfile> machineProfile(String sn) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/pos/machines/${Uri.encodeComponent(sn)}/info',
+    );
+    return PosMachineProfile.fromJson(json);
+  }
+
+  /// 按客户实名查已装机器（`GET /pos/installed-machines`）
+  ///
+  /// 装机页提交前的核对步骤：[name] 客户姓名 + [idTail] 身份证号后 6 位一起查，
+  /// 只回机器号与品牌；查不到不抛异常，用 `found=false` + `message` 走提示。
+  Future<InstalledMachines> installedMachines({
+    required String name,
+    required String idTail,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/pos/installed-machines',
+      query: {'name': name, 'idTail': idTail.trim().toUpperCase()},
+    );
+    return InstalledMachines.fromJson(json);
   }
 
   /// 机器详情（含时间线与奖励状态）

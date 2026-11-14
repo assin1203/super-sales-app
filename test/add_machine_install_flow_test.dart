@@ -8,20 +8,46 @@ import 'package:kqw_app/core/models/machine.dart';
 import 'package:kqw_app/pages/add_machine_page.dart';
 import 'package:kqw_app/pages/install_guide_page.dart';
 
-/// 打桩的 PosApi：只实现装机页用到的四个方法，记录装机调用。
+/// 打桩的 PosApi：只实现装机页用到的方法，记录装机调用。
 class _FakePosApi extends PosApi {
-  _FakePosApi({required this.preview}) : super(client: ApiClient(dio: Dio()));
+  _FakePosApi({required this.preview, this.installed}) : super(client: ApiClient(dio: Dio()));
 
   final PendingInstallPreview preview;
 
+  /// 实名核对结果（姓名 + 身份证后 6 位查已装机器），缺省 = 查不到
+  final InstalledMachines? installed;
+
   final List<String> installedApplyIds = [];
   String? installedMachineNo;
+  String? installedIdTail;
+  String? installedName;
+  int installedQueryCount = 0;
+
+  /// 最近一次「核对已装机器」查的入参
+  String? lastQueryName;
+  String? lastQueryIdTail;
 
   @override
   Future<List<PosBrandOption>> brands() async => const [];
 
   @override
   Future<List<PosTypeOption>> types() async => const [];
+
+  @override
+  Future<PosMachineProfile> machineProfile(String sn) async =>
+      PosMachineProfile(found: false, machineNo: sn, message: '未查到机具信息');
+
+  @override
+  Future<InstalledMachines> installedMachines({
+    required String name,
+    required String idTail,
+  }) async {
+    installedQueryCount++;
+    lastQueryName = name;
+    lastQueryIdTail = idTail;
+    return installed ??
+        const InstalledMachines(found: false, total: 0, message: '未查到该客户的装机记录');
+  }
 
   @override
   Future<PendingInstallPreview> pendingAppliesByPhone(String phone, {int? source}) async =>
@@ -41,9 +67,12 @@ class _FakePosApi extends PosApi {
     String? address,
     String? remark,
     String? trafficFeeRemark,
+    String? idTail,
   }) async {
     installedApplyIds.add(applyId);
     installedMachineNo = machineNo;
+    installedIdTail = idTail;
+    installedName = contactName;
     return MachineApply(
       applyId: applyId,
       machineNo: machineNo ?? '',
@@ -95,9 +124,21 @@ Future<void> _openPage(WidgetTester tester, PosApi api) async {
   await tester.pumpAndSettle();
 }
 
+/// 填完姓名/手机号/身份证 → 核对已装机器 → 确认 → 提交
+///
+/// 表单顺序：机器号 / 客户姓名 / 客户手机号 / 身份证后 6 位 / 流量费备注 / 备注
 Future<void> _fillPhoneAndSubmit(WidgetTester tester, String phone) async {
-  // 表单顺序：机器号 / 客户手机号 / 流量费备注 / 备注
-  await tester.enterText(find.byType(TextFormField).at(1), phone);
+  await tester.enterText(find.byType(TextFormField).at(1), '张三');
+  await tester.enterText(find.byType(TextFormField).at(2), phone);
+  await tester.enterText(find.byType(TextFormField).at(3), '123456');
+
+  // 核对是提交前的强制步骤：不确认就会被拦在提交之外
+  await tester.tap(find.text('核对已装机器'));
+  await tester.pumpAndSettle();
+  final confirm = find.text('确认无误，继续装机');
+  await tester.tap(confirm.evaluate().isNotEmpty ? confirm : find.text('确认，继续装机'));
+  await tester.pumpAndSettle();
+
   await tester.tap(find.text('确认添加'));
   await tester.pumpAndSettle();
 }
@@ -149,6 +190,10 @@ void main() {
     expect(api.installedApplyIds, ['21']);
     // 申请记录已带机号而输入框空着：回填后一起提交，避免与记录对不上
     expect(api.installedMachineNo, 'SN-21');
+    // 实名两项随装机一起上报（申请记录没存，空着后端拿不到），且只核对了一次
+    expect(api.installedIdTail, '123456');
+    expect(api.installedName, '张三');
+    expect(api.installedQueryCount, 1);
   });
 
   testWidgets('该号码没有可装机申请：提示后端文案，不发起装机', (tester) async {
@@ -202,8 +247,139 @@ void main() {
     expect(api.installedApplyIds, ['31']);
   });
 
-  testWidgets('说明页示例图可全屏预览：能左右滑动切换，也能关闭', (tester) async {
-    // 入口已随凭证区迁到申请页，这里直接打开说明页验证预览交互
+  testWidgets('没核对已装机器就提交：被拦下，不发起装机', (tester) async {
+    final api = _FakePosApi(
+      preview: PendingInstallPreview(
+        found: true,
+        phone: '139****1111',
+        total: 1,
+        message: '',
+        items: [_pending(applyId: '41', merchantName: '赵记水果')],
+      ),
+    );
+
+    await _openPage(tester, api);
+    await tester.enterText(find.byType(TextFormField).at(1), '张三');
+    await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
+    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('请先点「核对已装机器」，确认客户信息后再提交'), findsOneWidget);
+    expect(api.installedApplyIds, isEmpty);
+    // 没点核对就不该发起实名查询
+    expect(api.installedQueryCount, 0);
+  });
+
+  testWidgets('核对弹窗显示已装台数：同品牌两台提示上限，但仍允许提交', (tester) async {
+    final api = _FakePosApi(
+      installed: const InstalledMachines(
+        found: true,
+        total: 2,
+        message: '',
+        items: [
+          InstalledMachineItem(machineNo: 'SN-A1', brandName: '新大陆'),
+          InstalledMachineItem(machineNo: 'SN-A2', brandName: '新大陆'),
+        ],
+      ),
+      preview: PendingInstallPreview(
+        found: true,
+        phone: '139****1111',
+        total: 1,
+        message: '',
+        items: [_pending(applyId: '51', merchantName: '赵记水果')],
+      ),
+    );
+
+    await _openPage(tester, api);
+    await tester.enterText(find.byType(TextFormField).at(1), '张三');
+    await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
+    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+
+    await tester.tap(find.text('核对已装机器'));
+    await tester.pumpAndSettle();
+
+    // 台数 + 品牌统计 + 机器号清单都在弹窗里
+    expect(find.text('该客户已装机 2 台'), findsOneWidget);
+    expect(find.text('新大陆 2 台'), findsOneWidget);
+    expect(find.textContaining('已达 2 台上限'), findsOneWidget);
+    expect(find.text('SN-A1'), findsOneWidget);
+
+    await tester.tap(find.text('确认无误，继续装机'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('已确认：该客户已装 2 台'), findsOneWidget);
+    expect(api.installedQueryCount, 1);
+
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+    expect(api.installedApplyIds, ['51']);
+    expect(api.installedIdTail, '123456');
+  });
+
+  testWidgets('身份证后 6 位小写 x：核对与提交都按大写归一化', (tester) async {
+    final api = _FakePosApi(
+      preview: PendingInstallPreview(
+        found: true,
+        phone: '139****1111',
+        total: 1,
+        message: '',
+        items: [_pending(applyId: '61', merchantName: '孙记茶饮')],
+      ),
+    );
+
+    await _openPage(tester, api);
+    await tester.enterText(find.byType(TextFormField).at(1), '张三');
+    await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
+    await tester.enterText(find.byType(TextFormField).at(3), '12345x');
+
+    await tester.tap(find.text('核对已装机器'));
+    await tester.pumpAndSettle();
+    // 后端 @Matches 只认大写，核对请求不能带小写
+    expect(api.lastQueryIdTail, '12345X');
+    await tester.tap(find.text('确认，继续装机'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+    expect(api.installedApplyIds, ['61']);
+    expect(api.installedIdTail, '12345X');
+    expect(api.installedName, '张三');
+  });
+
+  testWidgets('核对后改客户手机号：核对结果作废，提交被拦下', (tester) async {
+    final api = _FakePosApi(
+      preview: PendingInstallPreview(
+        found: true,
+        phone: '139****1111',
+        total: 1,
+        message: '',
+        items: [_pending(applyId: '71', merchantName: '周记杂货')],
+      ),
+    );
+
+    await _openPage(tester, api);
+    await tester.enterText(find.byType(TextFormField).at(1), '张三');
+    await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
+    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+
+    await tester.tap(find.text('核对已装机器'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('确认，继续装机'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('已确认'), findsOneWidget);
+
+    // 手机号决定这条核对结果装在谁的申请单上，换号必须重新核对
+    await tester.enterText(find.byType(TextFormField).at(2), '13900002222');
+    await tester.pumpAndSettle();
+    expect(find.text('提交前需按姓名和身份证号核对客户已装机器'), findsOneWidget);
+
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+    expect(find.text('请先点「核对已装机器」，确认客户信息后再提交'), findsOneWidget);
+    expect(api.installedApplyIds, isEmpty);
+  });
+
+  testWidgets('说明页示例图可全屏预览：能左右滑动切换，也能关闭', (tester) async {    // 入口已随凭证区迁到申请页，这里直接打开说明页验证预览交互
     tester.view.physicalSize = const Size(1080, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);

@@ -507,10 +507,15 @@ class _InstallDialog extends StatefulWidget {
 }
 
 class _InstallDialogState extends State<_InstallDialog> {
+  /// 弹窗里的 TextFormField 校验器只在 Form.validate() 时才执行，
+  /// 不包 Form 的话「客户姓名 / 身份证后 6 位」的必填校验形同摆设
+  final _formKey = GlobalKey<FormState>();
   late final TextEditingController _sn =
       TextEditingController(text: widget.apply.machineNo);
   late final TextEditingController _contact =
       TextEditingController(text: widget.apply.contactName ?? '');
+  /// 客户身份证号后 6 位（实名核对；申请记录没存，装机现场必填）
+  final TextEditingController _idTail = TextEditingController();
   late final TextEditingController _merchant =
       TextEditingController(text: widget.apply.merchantName ?? '');
   late final TextEditingController _region =
@@ -544,6 +549,7 @@ class _InstallDialogState extends State<_InstallDialog> {
   void dispose() {
     _sn.dispose();
     _contact.dispose();
+    _idTail.dispose();
     _merchant.dispose();
     _region.dispose();
     _address.dispose();
@@ -590,6 +596,8 @@ class _InstallDialogState extends State<_InstallDialog> {
   }
 
   Future<void> _submit() async {
+    // 必填项没填完不发起装机：否则 idTail 会被 _installBody 静默丢掉
+    if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
     try {
       await posApi.installApply(
@@ -601,6 +609,7 @@ class _InstallDialogState extends State<_InstallDialog> {
         bootTime: _bootDate,
         trafficFeeRemark: _trafficFee.text.trim(),
         contactName: _contact.text.trim(),
+        idTail: _idTail.text.trim(),
         merchantName: _merchant.text.trim(),
         region: _region.text.trim(),
         address: _address.text.trim(),
@@ -624,30 +633,37 @@ class _InstallDialogState extends State<_InstallDialog> {
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
-          child: InstallFormFields(
-            snController: _sn,
-            trafficFeeController: _trafficFee,
-            remarkController: _remark,
-            installMode: _mode,
-            onInstallModeChanged: (v) => setState(() => _mode = v),
-            brands: _brands,
-            types: _types,
-            brandId: _brandId,
-            typeId: _typeId,
-            onBrandChanged: (v) => setState(() => _brandId = v),
-            onTypeChanged: (v) => setState(() => _typeId = v),
-            bootDate: _bootDate,
-            onPickBootDate: _pickBootDate,
-            optionsLoading: _loadingOptions,
-            optionsError: _optionsError,
-            onRetryOptions: _loadOptions,
-            // 弹窗按 applyId 装机，比装机页多出「补录」四项
-            extraFields: [
-              installField('联系人', child: _text(_contact, '申请记录已填可留空')),
-              installField('门店名称', child: _text(_merchant, '申请记录已填可留空')),
-              installField('所在地区', child: _text(_region, '申请记录已填可留空')),
-              installField('详细地址', child: _text(_address, '申请记录已填可留空')),
-            ],
+          child: Form(
+            key: _formKey,
+            child: InstallFormFields(
+              snController: _sn,
+              trafficFeeController: _trafficFee,
+              remarkController: _remark,
+              installMode: _mode,
+              onInstallModeChanged: (v) => setState(() => _mode = v),
+              brands: _brands,
+              types: _types,
+              brandId: _brandId,
+              typeId: _typeId,
+              onBrandChanged: (v) => setState(() => _brandId = v),
+              onTypeChanged: (v) => setState(() => _typeId = v),
+              bootDate: _bootDate,
+              onPickBootDate: _pickBootDate,
+              optionsLoading: _loadingOptions,
+              optionsError: _optionsError,
+              onRetryOptions: _loadOptions,
+              // 姓名与身份证后 6 位与装机页同源（共享字段与共享校验器），弹窗不再单列「联系人」
+              contactNameController: _contact,
+              contactNameValidator: validateInstallContactName,
+              idTailController: _idTail,
+              idTailValidator: validateInstallIdTail,
+              // 弹窗按 applyId 装机，比装机页多出「补录」三项
+              extraFields: [
+                installField('门店名称', child: _text(_merchant, '申请记录已填可留空')),
+                installField('所在地区', child: _text(_region, '申请记录已填可留空')),
+                installField('详细地址', child: _text(_address, '申请记录已填可留空')),
+              ],
+            ),
           ),
         ),
       ),

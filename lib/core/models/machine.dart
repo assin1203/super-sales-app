@@ -607,3 +607,148 @@ class PendingInstallPreview {
     );
   }
 }
+
+/// 机具档案（`GET /pos/machines/:sn/info`）：装机页扫机号后自动带出的机具信息。
+///
+/// 后端按「台账行 → 申请单 → 已装机机器」的优先级回填，所以品牌/类型可能为空
+/// （台账没导入）：[found] 为 false 时页面保持手选品牌/类型，不当异常处理。
+class PosMachineProfile {
+  const PosMachineProfile({
+    required this.found,
+    required this.machineNo,
+    this.brandId,
+    this.brandName,
+    this.typeId,
+    this.typeName,
+    this.model = '',
+    this.platform = '',
+    this.activity = '',
+    this.agentName = '',
+    this.feeRate = '',
+    this.scanRate = '',
+    this.trafficFee = '',
+    this.stockStatusLabel = '',
+    this.inStock = false,
+    this.installed = false,
+    this.message = '',
+  });
+
+  final bool found;
+  final String machineNo;
+
+  /// 品牌/类型 ID 直接用于表单选中（台账没导入时为空，保持手选）
+  final String? brandId;
+  final String? brandName;
+  final String? typeId;
+  final String? typeName;
+
+  /// 机具型号（如 NEW6220 / HM600Mp），台账回带，只读展示
+  final String model;
+  final String platform;
+  final String activity;
+  final String agentName;
+  final String feeRate;
+  final String scanRate;
+
+  /// 台账流量费（元，两位小数字符串；台账没填为空串）
+  final String trafficFee;
+
+  /// 台账库存状态文案（在库/已出库/已回收/已报废），非台账行为空串
+  final String stockStatusLabel;
+  final bool inStock;
+
+  /// 该机号是否已装机：true 时页面提示不要重复装机
+  final bool installed;
+
+  /// 后端给的提示文案（未命中/已装机/已带出），页面直接展示
+  final String message;
+
+  /// 只读展示用：「品牌 · 类型 · 型号 · 平台」只拼非空项
+  String get specsLine {
+    final parts = <String>[
+      if ((brandName ?? '').isNotEmpty) brandName!,
+      if ((typeName ?? '').isNotEmpty) typeName!,
+      if (model.isNotEmpty) model,
+      if (platform.isNotEmpty) platform,
+      if (activity.isNotEmpty) activity,
+      if (agentName.isNotEmpty) '代理 $agentName',
+    ];
+    return parts.join(' · ');
+  }
+
+  factory PosMachineProfile.fromJson(Map<String, dynamic> json) {
+    String text(String key) => '${json[key] ?? ''}';
+    String? optionalText(String key) {
+      final value = '${json[key] ?? ''}';
+      return value.isEmpty || value == 'null' ? null : value;
+    }
+
+    return PosMachineProfile(
+      found: json['found'] == true,
+      machineNo: text('machineNo'),
+      brandId: optionalText('brandId'),
+      brandName: optionalText('brandName'),
+      typeId: optionalText('typeId'),
+      typeName: optionalText('typeName'),
+      model: text('model'),
+      platform: text('platform'),
+      activity: text('activity'),
+      agentName: text('agentName'),
+      feeRate: text('feeRate'),
+      scanRate: text('scanRate'),
+      trafficFee: text('trafficFee'),
+      stockStatusLabel: text('stockStatusLabel'),
+      inStock: json['inStock'] == true,
+      installed: json['installed'] == true,
+      message: text('message'),
+    );
+  }
+}
+
+/// 该客户已装的一台机器：只回机器号与品牌（门店/地址等资料不外泄）
+class InstalledMachineItem {
+  const InstalledMachineItem({required this.machineNo, this.brandName = ''});
+
+  final String machineNo;
+  final String brandName;
+
+  factory InstalledMachineItem.fromJson(Map<String, dynamic> json) {
+    return InstalledMachineItem(
+      machineNo: '${json['machineNo'] ?? ''}',
+      brandName: '${json['brandName'] ?? ''}',
+    );
+  }
+}
+
+/// 按客户实名（姓名 + 身份证号后 6 位）查到的已装机器（`GET /pos/installed-machines`）。
+///
+/// 装机页在提交前用它做一次核对：查不到不是错误（新客户，或存量申请没录身份证后 6 位），
+/// 用 [message] 提示后照常允许继续装机。
+class InstalledMachines {
+  const InstalledMachines({
+    required this.found,
+    required this.total,
+    required this.message,
+    this.items = const [],
+  });
+
+  final bool found;
+  final int total;
+  final String message;
+  final List<InstalledMachineItem> items;
+
+  factory InstalledMachines.fromJson(Map<String, dynamic> json) {
+    final raw = json['items'];
+    return InstalledMachines(
+      found: json['found'] == true,
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      message: '${json['message'] ?? ''}',
+      items: raw is List
+          ? raw
+              .whereType<Map>()
+              .map((e) => InstalledMachineItem.fromJson(e.cast<String, dynamic>()))
+              .toList()
+          : const [],
+    );
+  }
+}

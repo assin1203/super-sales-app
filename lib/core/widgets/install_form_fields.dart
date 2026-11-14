@@ -10,6 +10,28 @@ import '../models/machine.dart';
 /// 历史上弹窗就漏了流量费备注，业务员在弹窗里装机时这一项永远传不上去。
 /// 字段集合、校验入口和样式统一收在这里，改一处两边同时生效。
 
+/// 身份证号后 6 位归一化：去空格 + 末位 X 统一大写。
+///
+/// 后端 `@Matches(^\d{5}[0-9X]$)` 只认大写，前端输入允许小写 x，
+/// 所以提交前、核对前都必须先归一化，避免「界面能过、后端 400」。
+String normalizeInstallIdTail(String value) => value.trim().toUpperCase();
+
+/// 身份证号后 6 位校验（与后端 `@Matches` 同口径）：前 5 位数字，末位数字或 X。
+String? validateInstallIdTail(String? value) {
+  final idTail = normalizeInstallIdTail(value ?? '');
+  if (idTail.isEmpty) return '请输入客户身份证号后 6 位';
+  if (!RegExp(r'^\d{5}[0-9X]$').hasMatch(idTail)) {
+    return '请输入身份证号最后 6 位（末位可为 X）';
+  }
+  return null;
+}
+
+/// 客户姓名必填（实名核对用，必须与身份证一致）
+String? validateInstallContactName(String? value) {
+  if ((value ?? '').trim().isEmpty) return '请输入客户姓名';
+  return null;
+}
+
 const _borderColor = Color(0xFFDDE2EA);
 const _focusColor = Color(0xFF2E7BFF);
 const _hintColor = Color(0xFF9AA3B2);
@@ -143,7 +165,14 @@ class InstallFormFields extends StatelessWidget {
     this.onRetryOptions,
     this.snValidator,
     this.onScanSn,
+    this.snFocusNode,
+    this.machineInfo,
+    this.contactNameController,
+    this.contactNameValidator,
     this.phoneField,
+    this.idTailController,
+    this.idTailValidator,
+    this.identityCheck,
     this.extraFields = const <Widget>[],
   });
 
@@ -171,8 +200,25 @@ class InstallFormFields extends StatelessWidget {
   final FormFieldValidator<String>? snValidator;
   final VoidCallback? onScanSn;
 
+  /// 机器号输入框焦点：装机页用它监听「手输机号离开输入框」后自动查机具档案
+  final FocusNode? snFocusNode;
+
+  /// 机具信息展示位（扫码带出的品牌/类型/型号），紧跟在机器号之后
+  final Widget? machineInfo;
+
+  /// 客户姓名（实名核对的第一项，排在手机号之前）
+  final TextEditingController? contactNameController;
+  final FormFieldValidator<String>? contactNameValidator;
+
   /// 装机页把「客户手机号」插在机器号之后；弹窗按申请单装机，不需要
   final Widget? phoneField;
+
+  /// 客户身份证号后 6 位（实名核对，装机必填）：手机号之后插入
+  final TextEditingController? idTailController;
+  final FormFieldValidator<String>? idTailValidator;
+
+  /// 实名核对结果与「核对已装机器」按钮（装机页用），紧跟身份证字段
+  final Widget? identityCheck;
 
   /// 额外字段（弹窗用：联系人 / 门店名称 / 所在地区 / 详细地址），与备注一起排在最后
   final List<Widget> extraFields;
@@ -201,6 +247,7 @@ class InstallFormFields extends StatelessWidget {
           '机器号',
           child: TextFormField(
             controller: snController,
+            focusNode: snFocusNode,
             textInputAction: TextInputAction.next,
             inputFormatters: [
               FilteringTextInputFormatter.allow(RegExp(r'[0-9A-Za-z_-]')),
@@ -208,7 +255,7 @@ class InstallFormFields extends StatelessWidget {
             ],
             validator: snValidator,
             decoration: installInputDecoration(
-              '申请已填机号可留空，否则扫码录入',
+              '扫码或手输机号',
               suffixIcon: onScanSn == null
                   ? null
                   : IconButton(
@@ -219,7 +266,36 @@ class InstallFormFields extends StatelessWidget {
             ),
           ),
         ),
+        if (machineInfo != null) machineInfo!,
+        if (contactNameController != null)
+          installField(
+            '客户姓名',
+            required: true,
+            child: TextFormField(
+              controller: contactNameController,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [LengthLimitingTextInputFormatter(20)],
+              validator: contactNameValidator,
+              decoration: installInputDecoration('与身份证一致的客户姓名'),
+            ),
+          ),
         if (phoneField != null) phoneField!,
+        if (idTailController != null)
+          installField(
+            '身份证号后 6 位',
+            required: true,
+            child: TextFormField(
+              controller: idTailController,
+              textInputAction: TextInputAction.next,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9Xx]')),
+                LengthLimitingTextInputFormatter(6),
+              ],
+              validator: idTailValidator,
+              decoration: installInputDecoration('客户身份证号最后 6 位（末位可为 X）'),
+            ),
+          ),
+        if (identityCheck != null) identityCheck!,
         installField('品牌', child: _brandField()),
         installField('类型', child: _typeField()),
         installField(
@@ -253,6 +329,9 @@ class InstallFormFields extends StatelessWidget {
     if (optionsLoading) return _optionPlaceholder('品牌加载中…');
     if (optionsError != null) return _optionFailed();
     return DropdownButtonFormField<String>(
+      // FormField 只在初始时读一次 initialValue（didUpdateWidget 不同步），
+      // 扫码回填是程序改选中值：用 key 重建才能把带出的品牌显示出来
+      key: ValueKey('brand-${brandId ?? ''}'),
       initialValue: brandId,
       isExpanded: true,
       decoration: installDropdownDecoration(brands.isEmpty ? '暂无可选品牌' : '请选择品牌'),
@@ -267,6 +346,8 @@ class InstallFormFields extends StatelessWidget {
     if (optionsLoading) return _optionPlaceholder('类型加载中…');
     if (optionsError != null) return _optionFailed();
     return DropdownButtonFormField<String>(
+      // 同上：扫码带出的类型要立刻回显，靠 key 重建同步选中值
+      key: ValueKey('type-${typeId ?? ''}'),
       initialValue: typeId,
       isExpanded: true,
       decoration: installDropdownDecoration(types.isEmpty ? '暂无可选类型' : '请选择类型'),
