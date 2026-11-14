@@ -17,6 +17,9 @@ class OrderItem {
     required this.deliveryType,
     this.productCover = '',
     this.createdAt,
+    this.expressCompany,
+    this.expressNo = '',
+    this.shippedAt,
   });
 
   final String id;
@@ -37,6 +40,11 @@ class OrderItem {
   final int deliveryType;
   final DateTime? createdAt;
 
+  /// 快递公司与单号（发货后服务端只下发这两项 + 订单号）
+  final String? expressCompany;
+  final String expressNo;
+  final DateTime? shippedAt;
+
   factory OrderItem.fromJson(Map<String, dynamic> json) => OrderItem(
         id: '${json['id'] ?? ''}',
         orderNo: json['orderNo'] as String? ?? '',
@@ -49,9 +57,18 @@ class OrderItem {
         statusName: json['statusName'] as String? ?? '',
         deliveryType: (json['deliveryType'] as num?)?.toInt() ?? 1,
         createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
+        expressCompany: json['expressCompany'] as String?,
+        expressNo: json['expressNo'] as String? ?? '',
+        shippedAt: DateTime.tryParse('${json['shippedAt'] ?? ''}'),
       );
 
   bool get isVirtual => deliveryType == 2;
+
+  /// 实物单已发货/已完成：服务端不再下发商品与积分，卡片按「订单号 + 物流」精简展示
+  bool get fulfilled => !isVirtual && (status == 1 || status == 2);
+
+  /// 有快递单号才展示物流行
+  bool get hasLogistics => expressNo.isNotEmpty;
 
   /// 待发货 + 实物单才能取消（与后端可取消口径一致）
   bool get cancellable => status == 0 && !isVirtual;
@@ -107,11 +124,11 @@ class OrderDetail extends OrderItem {
     required super.deliveryType,
     super.productCover,
     super.createdAt,
+    super.expressCompany,
+    super.expressNo,
+    super.shippedAt,
     this.address,
     this.virtualContent,
-    this.expressCompany,
-    this.expressNo,
-    this.shippedAt,
     this.finishedAt,
     this.cancelledAt,
     this.cancelReason,
@@ -121,9 +138,6 @@ class OrderDetail extends OrderItem {
 
   /// 虚拟商品卡密
   final String? virtualContent;
-  final String? expressCompany;
-  final String? expressNo;
-  final DateTime? shippedAt;
   final DateTime? finishedAt;
   final DateTime? cancelledAt;
   final String? cancelReason;
@@ -143,13 +157,13 @@ class OrderDetail extends OrderItem {
       statusName: item.statusName,
       deliveryType: item.deliveryType,
       createdAt: item.createdAt,
+      expressCompany: item.expressCompany,
+      expressNo: item.expressNo,
+      shippedAt: item.shippedAt,
       address: rawAddress is Map
           ? OrderAddress.fromJson(rawAddress.cast<String, dynamic>())
           : null,
       virtualContent: json['virtualContent'] as String?,
-      expressCompany: json['expressCompany'] as String?,
-      expressNo: json['expressNo'] as String? ?? '',
-      shippedAt: DateTime.tryParse('${json['shippedAt'] ?? ''}'),
       finishedAt: DateTime.tryParse('${json['finishedAt'] ?? ''}'),
       cancelledAt: DateTime.tryParse('${json['cancelledAt'] ?? ''}'),
       cancelReason: json['cancelReason'] as String?,
