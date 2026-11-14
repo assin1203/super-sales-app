@@ -194,15 +194,11 @@ class _PointsFlowPageState extends State<PointsFlowPage> {
   }
 
   Widget _typeFilter() {
-    const entries = <MapEntry<int?, String>>[
-      MapEntry(null, '全部'),
-      MapEntry(1, '达标入队'),
-      MapEntry(2, '推荐奖励'),
-      MapEntry(3, '团队分红'),
-      MapEntry(4, '任务奖励'),
-      MapEntry(5, '商城兑换'),
-      MapEntry(9, '礼包充值'),
-      MapEntry(10, '其他'),
+    // 筛选项从模型派生：新增 flowType 只改 PointsFlowItem.filterLabels 一处
+    final entries = <MapEntry<int?, String>>[
+      const MapEntry(null, '全部'),
+      for (final entry in PointsFlowItem.filterLabels.entries)
+        MapEntry(entry.key, entry.value),
     ];
     return SizedBox(
       height: 48,

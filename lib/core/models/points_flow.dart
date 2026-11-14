@@ -17,7 +17,8 @@ class PointsFlowItem {
   final String id;
 
   /// 1 达标入队 / 2 推荐达标奖励 / 3 团队分红 / 4 任务奖励 / 5 商城兑换扣减
-  /// 6 晋级礼奖励 / 7 后台人工调账 / 8 订单取消退回 / 9 积分礼包充值 / 10 其他
+  /// 6 晋级礼奖励 / 7 后台人工调账 / 8 订单取消退回 / 9 积分礼包充值
+  /// 10 其他 / 11 会员互赠（后端 `GIFT_PEER` 单独成类，与晋级礼区分）
   final int flowType;
   final String typeName;
 
@@ -47,7 +48,7 @@ class PointsFlowItem {
   /// 带符号展示：+100 / -50
   String get deltaLabel => isIncome ? '+$delta' : delta;
 
-  /// 流水类型筛选项（与后端 flowType 1~10 对齐）
+  /// 流水类型筛选项（与后端 flowType 编号对齐）
   static const Map<int, String> typeLabels = {
     1: '达标入队积分',
     2: '推荐达标奖励',
@@ -58,6 +59,22 @@ class PointsFlowItem {
     7: '后台人工调账',
     8: '订单取消退回',
     9: '积分礼包充值',
+    11: '会员互赠',
+    10: '其他',
+  };
+
+  /// 流水页筛选项的短文案（chip 位置窄，用比 [typeLabels] 更短的标签）
+  ///
+  /// 与 [typeLabels] 同处维护：后端新增 flowType 时两张表一起改，
+  /// 页面不再另写一份 `flowType → 文案` 列表。
+  static const Map<int, String> filterLabels = {
+    1: '达标入队',
+    2: '推荐奖励',
+    3: '团队分红',
+    4: '任务奖励',
+    5: '商城兑换',
+    9: '礼包充值',
+    11: '会员互赠',
     10: '其他',
   };
 }
