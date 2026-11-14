@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../core/api/points_api.dart';
 import '../core/api_client.dart';
+import '../core/auth_provider.dart';
 import '../core/models/points_summary.dart';
 import '../core/request_no.dart';
 import '../core/theme.dart';
@@ -86,6 +88,17 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
     return null;
   }
 
+  /// 是否已设置交易密码：已设置则转赠必须补一次 6 位验证（后端 20012 强制）。
+  ///
+  /// 缺 Provider 时（个别单测直接挂载本页）按「未设置」处理，不阻断转赠主流程。
+  bool get _tradePasswordRequired {
+    try {
+      return context.read<AuthProvider>().user?.tradePasswordSet ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<void> _submit() async {
     if (_submitting) return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -93,42 +106,74 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
     final phone = _phoneCtrl.text.trim();
     final points = int.parse(_pointsCtrl.text.trim());
     final remark = _remarkCtrl.text.trim();
+    final needTradePwd = _tradePasswordRequired;
 
-    final confirmed = await showDialog<bool>(
+    // 确认弹窗同时收交易密码：取消返回 null，确认返回输入值（无需密码时为空串）
+    final pwdCtrl = TextEditingController();
+    String? pwdError;
+    final tradePassword = await showDialog<String>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('确认赠送',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _confirmRow('接收方', _maskPhone(phone)),
-            const SizedBox(height: 8),
-            _confirmRow('赠送积分', '$points'),
-            if (remark.isNotEmpty) ...[
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('确认赠送',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _confirmRow('接收方', _maskPhone(phone)),
               const SizedBox(height: 8),
-              _confirmRow('备注', remark),
+              _confirmRow('赠送积分', '$points'),
+              if (remark.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _confirmRow('备注', remark),
+              ],
+              if (needTradePwd) ...[
+                const SizedBox(height: 14),
+                TextField(
+                  controller: pwdCtrl,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: '交易密码',
+                    helperText: '已设置交易密码，转赠需验证',
+                    errorText: pwdError,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              const Text('积分转出后不可撤回，请确认手机号无误。',
+                  style: TextStyle(fontSize: 12, color: Colors.black45)),
             ],
-            const SizedBox(height: 12),
-            const Text('积分转出后不可撤回，请确认手机号无误。',
-                style: TextStyle(fontSize: 12, color: Colors.black45)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () {
+                final pwd = pwdCtrl.text.trim();
+                if (needTradePwd && !RegExp(r'^\d{6}$').hasMatch(pwd)) {
+                  setDialogState(() => pwdError = '请输入 6 位交易密码');
+                  return;
+                }
+                Navigator.pop(dialogContext, pwd);
+              },
+              child: const Text('确认赠送',
+                  style: TextStyle(color: kqwPrimary)),
+            ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('确认赠送',
-                style: TextStyle(color: kqwPrimary)),
-          ),
-        ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    pwdCtrl.dispose();
+    if (tradePassword == null || !mounted) return;
 
     setState(() => _submitting = true);
     _requestNo ??= newRequestNo();
@@ -138,6 +183,7 @@ class _PointsTransferPageState extends State<PointsTransferPage> {
         points: points,
         remark: remark,
         requestNo: _requestNo,
+        tradePassword: tradePassword.isEmpty ? null : tradePassword,
       );
       _requestNo = null;
       if (!mounted) return;

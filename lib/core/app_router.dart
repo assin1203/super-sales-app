@@ -21,6 +21,9 @@ import '../pages/points_transfer_page.dart';
 import '../pages/profile_page.dart';
 import '../pages/referral_page.dart';
 import '../pages/room_detail_page.dart';
+import '../pages/settings_page.dart';
+import '../pages/trade_password_page.dart';
+import '../pages/phone_rebind_page.dart';
 import 'auth_provider.dart';
 import 'shell_layout.dart';
 
@@ -70,6 +73,13 @@ GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey})
           builder: (c, s) => const ApplyMachinePage()),
       GoRoute(path: '/packages', builder: (c, s) => const PackagesPage()),
       GoRoute(path: '/password', builder: (c, s) => const PasswordPage()),
+      GoRoute(path: '/settings', builder: (c, s) => const SettingsPage()),
+      GoRoute(
+          path: '/trade-password',
+          builder: (c, s) => const TradePasswordPage()),
+      GoRoute(
+          path: '/phone/rebind',
+          builder: (c, s) => const PhoneRebindPage()),
       GoRoute(
         path: '/room/:roomId',
         builder: (c, s) => RoomDetailPage(roomId: s.pathParameters['roomId']!),

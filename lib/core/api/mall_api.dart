@@ -71,6 +71,7 @@ class MallApi {
     int buyCount = 1,
     String? addressId,
     String? requestNo,
+    String? tradePassword,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/mall/exchange',
@@ -79,6 +80,9 @@ class MallApi {
         'buyCount': buyCount,
         if (addressId != null && addressId.isNotEmpty) 'addressId': addressId,
         'requestNo': requestNo ?? newRequestNo(),
+        // 已设置交易密码的账号必传，未设置时后端放行（兼容老用户）
+        if (tradePassword != null && tradePassword.isNotEmpty)
+          'tradePassword': tradePassword,
       },
     );
     return ExchangeResult.fromJson(json);

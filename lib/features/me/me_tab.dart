@@ -484,7 +484,7 @@ class _MeTabState extends State<MeTab> {
         _tile(context, Icons.system_update_alt, '检查更新', _checkUpdate),
         const Divider(height: 1, indent: 56),
         _tile(context, Icons.settings_outlined, '设置',
-            () => showToast(context, '功能开发中')),
+            () => context.push('/settings')),
         const Divider(height: 1, indent: 56),
         _tile(
           context,

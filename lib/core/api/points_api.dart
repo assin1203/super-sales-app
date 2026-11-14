@@ -81,6 +81,7 @@ class PointsApi {
     required int points,
     String? remark,
     String? requestNo,
+    String? tradePassword,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/points/transfers',
@@ -89,6 +90,9 @@ class PointsApi {
         'points': points,
         if (remark != null && remark.trim().isNotEmpty) 'remark': remark.trim(),
         'requestNo': requestNo ?? newRequestNo(),
+        // 已设置交易密码的账号必传，未设置时后端放行（兼容老用户）
+        if (tradePassword != null && tradePassword.isNotEmpty)
+          'tradePassword': tradePassword,
       },
     );
     return PointsTransferResult.fromJson(json);

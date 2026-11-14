@@ -43,11 +43,10 @@ void main() {
 
   testWidgets('登录后首页正常渲染', (tester) async {
     await pumpLoggedInApp(tester);
-    // 入房档位与积分礼包已从首页下线，房间统一从「我的团队」进入
-    expect(find.text('积分礼包'), findsNothing);
+    // 会员等级与任务中心已从首页下线；档位接口在测试环境失败 → 不渲染礼包卡
+    expect(find.text('会员等级'), findsNothing);
+    expect(find.text('任务中心'), findsNothing);
     expect(find.text('购买升级礼包'), findsNothing);
-    await tester.scrollUntilVisible(find.text('会员等级'), 200, scrollable: find.byType(Scrollable).first);
-    expect(find.text('会员等级'), findsOneWidget);
   });
 
   testWidgets('登录后商城页正常渲染', (tester) async {

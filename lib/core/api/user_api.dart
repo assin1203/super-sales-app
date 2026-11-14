@@ -202,6 +202,53 @@ class UserApi {
         '/user/password/reset',
         body: {'phone': phone, 'code': code, 'newPassword': newPassword},
       );
+
+  /// 换绑手机号（旧号 + 新号双验证码，`POST /user/phone/rebind`）。
+  ///
+  /// 两张验证码分别由 [CommonApi.sendSms] 发到旧号与新号；
+  /// 成功后服务端撤销全部 refresh，调用方必须登出回登录页。
+  Future<void> rebindPhone({
+    required String oldCode,
+    required String phone,
+    required String code,
+  }) =>
+      _api.postVoid(
+        '/user/phone/rebind',
+        body: {'oldCode': oldCode, 'phone': phone, 'code': code},
+      );
+
+  /// 首次设置交易密码（`POST /user/trade-password`）：短信验证码 + 6 位数字
+  Future<void> setupTradePassword({
+    required String code,
+    required String tradePassword,
+  }) =>
+      _api.postVoid(
+        '/user/trade-password',
+        body: {'code': code, 'tradePassword': tradePassword},
+      );
+
+  /// 修改交易密码（`PUT /user/trade-password`）：旧 + 新，均 6 位数字
+  Future<void> changeTradePassword({
+    required String oldTradePassword,
+    required String newTradePassword,
+  }) =>
+      _api.putVoid(
+        '/user/trade-password',
+        body: {
+          'oldTradePassword': oldTradePassword,
+          'newTradePassword': newTradePassword,
+        },
+      );
+
+  /// 忘记交易密码（`POST /user/trade-password/reset`）：短信验证码 + 新密码
+  Future<void> resetTradePassword({
+    required String code,
+    required String tradePassword,
+  }) =>
+      _api.postVoid(
+        '/user/trade-password/reset',
+        body: {'code': code, 'tradePassword': tradePassword},
+      );
 }
 
 final UserApi userApi = UserApi();

@@ -21,6 +21,7 @@ class UserInfo {
     this.lv2ReferrerNickname,
     this.status = 1,
     this.canInstall = false,
+    this.tradePasswordSet = false,
     this.createdAt,
   });
 
@@ -63,6 +64,9 @@ class UserInfo {
   /// 「我的」据此决定是否展示「安装POS」入口；登录快照不含该字段，缺省 false。
   final bool canInstall;
 
+  /// 是否已设置交易密码：设置页显示状态，转赠/兑换页决定要不要弹输入框
+  final bool tradePasswordSet;
+
   final DateTime? createdAt;
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
@@ -83,6 +87,7 @@ class UserInfo {
       lv2ReferrerNickname: json['lv2ReferrerNickname'] as String?,
       status: (json['status'] as num?)?.toInt() ?? 1,
       canInstall: json['canInstall'] as bool? ?? false,
+      tradePasswordSet: json['tradePasswordSet'] as bool? ?? false,
       createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
     );
   }
@@ -104,6 +109,7 @@ class UserInfo {
         'lv2ReferrerNickname': lv2ReferrerNickname,
         'status': status,
         'canInstall': canInstall,
+        'tradePasswordSet': tradePasswordSet,
         if (createdAt != null) 'createdAt': createdAt!.toIso8601String(),
       };
 
@@ -155,6 +161,7 @@ class UserInfo {
         status: status,
         // 后台装机开关不在资料编辑范围内，必须原样透传，否则保存资料后入口会消失
         canInstall: canInstall,
+        tradePasswordSet: tradePasswordSet,
         createdAt: createdAt,
       );
 }

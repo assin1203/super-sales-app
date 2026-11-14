@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -313,22 +314,68 @@ class _MallTabState extends State<MallTab> {
   IconData _placeholderIcon(Product p) => p.isVirtual ? Icons.redeem_outlined : Icons.inventory_2_outlined;
 
   Future<void> _confirmExchange(Product p) async {
-    final confirmed = await showDialog<bool>(
+    // 已设置交易密码的账号：确认弹窗内补一次 6 位验证（后端 20012 强制）
+    final needTradePwd =
+        context.read<AuthProvider>().user?.tradePasswordSet ?? false;
+    final pwdCtrl = TextEditingController();
+    String? pwdError;
+    final tradePassword = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('兑换「${p.name}」'),
-        content: Text('消耗 ${p.pricePoints} 积分，确认兑换？\n（积分先冻结，扣减成功后发货）'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('确认')),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: Text('兑换「${p.name}」'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('消耗 ${p.pricePoints} 积分，确认兑换？\n（积分先冻结，扣减成功后发货）'),
+              if (needTradePwd) ...[
+                const SizedBox(height: 14),
+                TextField(
+                  controller: pwdCtrl,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(6),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: '交易密码',
+                    helperText: '已设置交易密码，兑换需验证',
+                    errorText: pwdError,
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+            FilledButton(
+              onPressed: () {
+                final pwd = pwdCtrl.text.trim();
+                if (needTradePwd && !RegExp(r'^\d{6}$').hasMatch(pwd)) {
+                  setDialogState(() => pwdError = '请输入 6 位交易密码');
+                  return;
+                }
+                Navigator.pop(ctx, pwd);
+              },
+              child: const Text('确认'),
+            ),
+          ],
+        ),
       ),
     );
-    if (confirmed != true || !mounted) return;
+    pwdCtrl.dispose();
+    if (tradePassword == null || !mounted) return;
 
     setState(() => _exchangingId = p.id);
     try {
-      await mallApi.exchange(p.id);
+      await mallApi.exchange(
+        p.id,
+        tradePassword: tradePassword.isEmpty ? null : tradePassword,
+      );
       if (!mounted) return;
       showToast(context, '「${p.name}」兑换成功');
       await _load();

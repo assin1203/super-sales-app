@@ -6,26 +6,33 @@ import 'package:provider/provider.dart';
 
 import '../../core/api/home_api.dart';
 import '../../core/api/notice_api.dart';
+import '../../core/api/points_api.dart';
 import '../../core/api/pos_api.dart';
 import '../../core/api/task_api.dart';
+import '../../core/api/team_api.dart';
 import '../../core/api_client.dart';
 import '../../core/auth_provider.dart';
 import '../../core/models/banner_item.dart';
 import '../../core/models/machine.dart';
 import '../../core/models/notice_item.dart';
+import '../../core/models/points_summary.dart';
+import '../../core/models/room_package.dart';
 import '../../core/models/task_item.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
 import '../../core/widgets/async_view.dart';
+import '../team/enter_room_flow.dart';
 
-/// 首页：广告轮播 / 等级进度 / 机器达标监控 / 任务中心 / 平台公告
+/// 首页：广告轮播 / 购买升级礼包 / 机器达标监控 / 平台公告
 ///
 /// 数据源（除 banner 公开外都需 app token）：
 /// - `GET /home/banners`（空时用本地兜底图，不算错误）
+/// - `GET /team/room-packages`（入房档位，只展示未购买的档位）
+/// - `GET /user/points`（入房前判断积分是否够）
 /// - `GET /pos/machines`（取第一台展示达标进度）
-/// - `GET /tasks?category=1`（新手任务完成度）
 ///
-/// 入房档位 / 积分礼包已下线：房间与购买礼包统一从「我的团队」进入。
+/// 已购买的档位整卡不展示：买过就不再需要「购买升级礼包」入口，
+/// 仍可从「我的团队」进入房间。
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
@@ -36,8 +43,10 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   List<BannerItem> _banners = const [];
   List<NoticeItem> _notices = const [];
+  List<RoomPackage> _roomPackages = const [];
   Machine? _machine;
   List<TaskItem> _newbieTasks = const [];
+  PointsSummary? _points;
   bool _loading = true;
 
   @override
@@ -71,11 +80,31 @@ class _HomeTabState extends State<HomeTab> {
 
     if (auth.loggedIn) {
       await Future.wait([
+        _loadRoomPackages(),
+        _loadPoints(),
         _loadMachine(),
         _loadTasks(),
       ]);
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadRoomPackages() async {
+    try {
+      final items = await teamApi.roomPackages();
+      if (mounted) setState(() => _roomPackages = items);
+    } on ApiException {
+      // 档位区留空即可，首页其他模块不受影响
+    }
+  }
+
+  Future<void> _loadPoints() async {
+    try {
+      final summary = await pointsApi.summary();
+      if (mounted) setState(() => _points = summary);
+    } on ApiException {
+      // 余额未知时确认弹窗里就不展示当前积分，不阻断点击
+    }
   }
 
   Future<void> _loadMachine() async {
@@ -100,14 +129,13 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
         // 首页没有 AppBar，列表从屏幕顶端开始，需自己让出状态栏高度，
         // 否则顶部轮播图会被系统状态栏压住。
         padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top + 8,
+          top: MediaQuery.of(context).padding.top + 20,
           bottom: 24,
         ),
         children: [
@@ -115,12 +143,15 @@ class _HomeTabState extends State<HomeTab> {
           const SizedBox(height: 12),
           _applyEntryCard(),
           _noticeCard(),
+          // 购买升级礼包：只展示「未购买」的档位，买过的整卡不出现
+          for (final pkg in _roomPackages.where((p) => !p.purchased))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: _giftCard(context, pkg),
+            ),
           const SizedBox(height: 12),
-          _levelCard(auth),
-          const SizedBox(height: 12),
+          // 会员等级与任务中心入口按运营要求暂时下线（组件保留，恢复时加回这两行）
           _machineCard(context),
-          const SizedBox(height: 12),
-          _taskCard(context),
           if (_loading)
             const Padding(
               padding: EdgeInsets.only(top: 12),
@@ -135,6 +166,108 @@ class _HomeTabState extends State<HomeTab> {
         ],
       ),
     );
+  }
+
+  // ---------- 购买升级礼包（未购买档位） ----------
+
+  Widget _packageImage(RoomPackage pkg) {
+    final fallback = Container(
+      width: 52,
+      height: 52,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+            colors: [Color(0xFFE53935), Color(0xFFFF6B4A)]),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: const Icon(Icons.card_giftcard, color: Colors.white, size: 26),
+    );
+    if (pkg.image.isEmpty) return fallback;
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Image.network(
+        pkg.image,
+        width: 52,
+        height: 52,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => fallback,
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : fallback,
+      ),
+    );
+  }
+
+  Widget _giftCard(BuildContext context, RoomPackage pkg) {
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _confirmEnter(context, pkg),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              _packageImage(pkg),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(pkg.name,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text('${pkg.entryPoints}',
+                            style: pointsTextStyle(size: 17)),
+                        const SizedBox(width: 4),
+                        const Text('积分兑换',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.black54)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: kqwPrimary,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: const Size(0, 36),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                onPressed: () => _confirmEnter(context, pkg),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('购买升级礼包',
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.w600)),
+                    Icon(Icons.chevron_right, size: 16),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 进入房间：确认档位消耗后真调 `POST /team/rooms/enter`，
+  /// 成功跳房间详情并刷新可用积分（首次入房会扣礼包积分）。
+  Future<void> _confirmEnter(BuildContext context, RoomPackage pkg) async {
+    final result = await enterRoomFlow(
+      context,
+      pkg: pkg,
+      balance: _points?.balanceValue,
+    );
+    if (result == null || !mounted) return;
+    // 扣过分要立刻同步余额，还要刷新档位：本档位买过后首页不再展示
+    _loadPoints();
+    _loadRoomPackages();
   }
 
   // ---------- 申请 POS 机入口 ----------
@@ -238,6 +371,7 @@ class _HomeTabState extends State<HomeTab> {
 
   // ---------- 等级进度（L1 → L2 双条件取较优） ----------
 
+  // ignore: unused_element
   Widget _levelCard(AuthProvider auth) {
     final level = auth.user?.level ?? 0;
     final levelName = auth.user?.levelLabel ?? 'L0';
@@ -446,6 +580,7 @@ class _HomeTabState extends State<HomeTab> {
 
   // ---------- 任务中心（进度 + 入口） ----------
 
+  // ignore: unused_element
   Widget _taskCard(BuildContext context) {
     final total = _newbieTasks.length;
     final done = _newbieTasks.where((t) => t.claimed).length;
@@ -718,7 +853,7 @@ class _AdCarouselState extends State<_AdCarousel> {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      height: 120,
+      height: 180,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Stack(

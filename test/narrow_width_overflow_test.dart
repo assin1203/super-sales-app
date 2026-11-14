@@ -105,6 +105,9 @@ void main() {
     '/machine/add',
     '/machine/apply',
     '/forgot-password',
+    '/settings',
+    '/trade-password',
+    '/phone/rebind',
     '/room/1',
   ];
 
