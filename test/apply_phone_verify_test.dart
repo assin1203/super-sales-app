@@ -54,6 +54,9 @@ class _FakePosApi extends PosApi {
     String? address,
     String? remark,
     List<String>? proofImages,
+    String? brandId,
+    String? typeId,
+    String? platformId,
   }) async {
     applyCalls++;
     appliedUseType = useType;

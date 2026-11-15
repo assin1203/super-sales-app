@@ -284,6 +284,23 @@ class PosTypeOption {
       );
 }
 
+/// 所属平台下拉项（GET /pos/platforms）
+///
+/// 与品牌/类型同构：只有 id + name。提交申请时传 id，后端按字典项校验后
+/// 把名称写进申请单（`pos_apply.platform` 是文本快照列，无外键）。
+class PosPlatformOption {
+  const PosPlatformOption({required this.id, required this.name});
+
+  final String id;
+  final String name;
+
+  factory PosPlatformOption.fromJson(Map<String, dynamic> json) =>
+      PosPlatformOption(
+        id: '${json['id'] ?? ''}',
+        name: json['name'] as String? ?? '',
+      );
+}
+
 /// 新增机器结果（POST /pos/machines）
 ///
 /// [customerUserId] 为 null 表示机号没查到归属用户，后端按"空着"处理。

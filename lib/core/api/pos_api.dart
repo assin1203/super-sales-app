@@ -235,6 +235,9 @@ class PosApi {
     String? address,
     String? remark,
     List<String>? proofImages,
+    String? brandId,
+    String? typeId,
+    String? platformId,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/pos/apply',
@@ -249,6 +252,10 @@ class PosApi {
         if (remark != null && remark.isNotEmpty) 'remark': remark,
         if (proofImages != null && proofImages.isNotEmpty)
           'proofImages': proofImages,
+        // 品牌/类型/所属平台都是选填：没选就不传，服务端保持 NULL（平台按名称快照落库）
+        if (brandId != null && brandId.isNotEmpty) 'brandId': brandId,
+        if (typeId != null && typeId.isNotEmpty) 'typeId': typeId,
+        if (platformId != null && platformId.isNotEmpty) 'platformId': platformId,
       },
     );
     return MachineApplyResult.fromJson(json);
@@ -297,6 +304,17 @@ class PosApi {
     return items
         .whereType<Map>()
         .map((e) => PosTypeOption.fromJson(e.cast<String, dynamic>()))
+        .toList();
+  }
+
+  /// 所属平台下拉（后台 /admin/pos/platforms 维护，仅返回启用项，sort 升序）
+  Future<List<PosPlatformOption>> platforms() async {
+    final json = await _api.get<Map<String, dynamic>>('/pos/platforms');
+    final items = json['items'];
+    if (items is! List) return const [];
+    return items
+        .whereType<Map>()
+        .map((e) => PosPlatformOption.fromJson(e.cast<String, dynamic>()))
         .toList();
   }
 
