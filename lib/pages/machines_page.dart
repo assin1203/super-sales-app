@@ -9,7 +9,8 @@ import '../core/models/machine.dart';
 import '../core/theme.dart';
 import '../core/toast.dart';
 import '../core/widgets/async_view.dart';
-import '../core/widgets/install_form_fields.dart';
+
+import 'install_apply_page.dart';
 
 /// 我的机器（FR-3.x：机器编号 / 开机时间 / 推荐人 / 新手任务完成状态）
 ///
@@ -304,11 +305,10 @@ class _MachinesPageState extends State<MachinesPage> {
     );
   }
 
-  /// 装机弹窗：选安装方式，申请记录缺的信息可在这里补录
+  /// 装机：跳独立页面填写，回来后提示并刷新列表
   Future<void> _openInstall(MachineApply a) async {
-    final installed = await showDialog<bool>(
-      context: context,
-      builder: (_) => _InstallDialog(apply: a),
+    final installed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => InstallApplyPage(apply: a)),
     );
     if (installed == true && mounted) {
       showToast(context, '装机成功，已转入「已安装」列表');
@@ -491,197 +491,4 @@ class _MachinesPageState extends State<MachinesPage> {
       ),
     );
   }
-}
-
-/// 装机弹窗：安装方式 + 申请记录缺的信息补录
-///
-/// 只提交用户填了值的字段，留空由后端沿用申请记录，
-/// 避免把申请里已有的值覆盖成空。
-class _InstallDialog extends StatefulWidget {
-  const _InstallDialog({required this.apply});
-
-  final MachineApply apply;
-
-  @override
-  State<_InstallDialog> createState() => _InstallDialogState();
-}
-
-class _InstallDialogState extends State<_InstallDialog> {
-  /// 弹窗里的 TextFormField 校验器只在 Form.validate() 时才执行，
-  /// 不包 Form 的话「客户姓名 / 身份证后 6 位」的必填校验形同摆设
-  final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _sn =
-      TextEditingController(text: widget.apply.machineNo);
-  late final TextEditingController _contact =
-      TextEditingController(text: widget.apply.contactName ?? '');
-  /// 客户身份证号后 6 位（实名核对；申请记录没存，装机现场必填）
-  final TextEditingController _idTail = TextEditingController();
-  late final TextEditingController _merchant =
-      TextEditingController(text: widget.apply.merchantName ?? '');
-  late final TextEditingController _region =
-      TextEditingController(text: widget.apply.region ?? '');
-  late final TextEditingController _address =
-      TextEditingController(text: widget.apply.address ?? '');
-  late final TextEditingController _remark =
-      TextEditingController(text: widget.apply.remark ?? '');
-  late final TextEditingController _trafficFee = TextEditingController();
-
-  int _mode = 1;
-  String? _brandId;
-  String? _typeId;
-  DateTime? _bootDate;
-  List<PosBrandOption> _brands = const [];
-  List<PosTypeOption> _types = const [];
-  bool _loadingOptions = true;
-  String? _optionsError;
-  bool _submitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _brandId = widget.apply.brandId;
-    _typeId = widget.apply.typeId;
-    _bootDate = widget.apply.bootTime;
-    _loadOptions();
-  }
-
-  @override
-  void dispose() {
-    _sn.dispose();
-    _contact.dispose();
-    _idTail.dispose();
-    _merchant.dispose();
-    _region.dispose();
-    _address.dispose();
-    _remark.dispose();
-    _trafficFee.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadOptions() async {
-    var brands = const <PosBrandOption>[];
-    var types = const <PosTypeOption>[];
-    String? error;
-    setState(() {
-      _loadingOptions = true;
-      _optionsError = null;
-    });
-    try {
-      brands = await posApi.brands();
-      types = await posApi.types();
-    } on ApiException catch (e) {
-      // 选项拉不到不阻断装机：品牌/类型留空由后端沿用申请记录，但要给出可重试的入口
-      error = e.displayMessage;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _brands = brands;
-          _types = types;
-          _optionsError = error;
-          if (_brandId != null && !brands.any((b) => b.id == _brandId)) {
-            _brandId = null;
-          }
-          if (_typeId != null && !types.any((t) => t.id == _typeId)) {
-            _typeId = null;
-          }
-          _loadingOptions = false;
-        });
-      }
-    }
-  }
-
-  Future<void> _pickBootDate() async {
-    final picked = await pickInstallBootDate(context, _bootDate);
-    if (picked != null && mounted) setState(() => _bootDate = picked);
-  }
-
-  Future<void> _submit() async {
-    // 必填项没填完不发起装机：否则 idTail 会被 _installBody 静默丢掉
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _submitting = true);
-    try {
-      await posApi.installApply(
-        applyId: widget.apply.applyId,
-        machineNo: _sn.text.trim(),
-        installMode: _mode,
-        brandId: _brandId,
-        typeId: _typeId,
-        bootTime: _bootDate,
-        trafficFeeRemark: _trafficFee.text.trim(),
-        contactName: _contact.text.trim(),
-        idTail: _idTail.text.trim(),
-        merchantName: _merchant.text.trim(),
-        region: _region.text.trim(),
-        address: _address.text.trim(),
-        remark: _remark.text.trim(),
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } on ApiException catch (e) {
-      if (mounted) showToast(context, e.displayMessage);
-    } catch (_) {
-      if (mounted) showToast(context, '装机失败，请稍后重试');
-    } finally {
-      // 成功时已经 pop，这里只在失败路径恢复按钮，避免「提交中…」永久置灰
-      if (mounted) setState(() => _submitting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('安装 POS 机'),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Form(
-            key: _formKey,
-            child: InstallFormFields(
-              snController: _sn,
-              trafficFeeController: _trafficFee,
-              remarkController: _remark,
-              installMode: _mode,
-              onInstallModeChanged: (v) => setState(() => _mode = v),
-              brands: _brands,
-              types: _types,
-              brandId: _brandId,
-              typeId: _typeId,
-              onBrandChanged: (v) => setState(() => _brandId = v),
-              onTypeChanged: (v) => setState(() => _typeId = v),
-              bootDate: _bootDate,
-              onPickBootDate: _pickBootDate,
-              optionsLoading: _loadingOptions,
-              optionsError: _optionsError,
-              onRetryOptions: _loadOptions,
-              // 姓名与身份证后 6 位与装机页同源（共享字段与共享校验器），弹窗不再单列「联系人」
-              contactNameController: _contact,
-              contactNameValidator: validateInstallContactName,
-              idTailController: _idTail,
-              idTailValidator: validateInstallIdTail,
-              // 弹窗按 applyId 装机，比装机页多出「补录」三项
-              extraFields: [
-                installField('门店名称', child: _text(_merchant, '申请记录已填可留空')),
-                installField('所在地区', child: _text(_region, '申请记录已填可留空')),
-                installField('详细地址', child: _text(_address, '申请记录已填可留空')),
-              ],
-            ),
-          ),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _submitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: _submitting ? null : _submit,
-          child: Text(_submitting ? '提交中…' : '确认装机'),
-        ),
-      ],
-    );
-  }
-
-  Widget _text(TextEditingController controller, String hint) => TextField(
-        controller: controller,
-        decoration: installInputDecoration(hint),
-      );
 }

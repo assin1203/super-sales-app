@@ -37,6 +37,7 @@ class _AddMachinePageState extends State<AddMachinePage> {
   final _nameCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _idTailCtrl = TextEditingController();
+  final _merchantCtrl = TextEditingController();
   final _trafficFeeCtrl = TextEditingController();
   final _remarkCtrl = TextEditingController();
 
@@ -100,6 +101,7 @@ class _AddMachinePageState extends State<AddMachinePage> {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _idTailCtrl.dispose();
+    _merchantCtrl.dispose();
     _trafficFeeCtrl.dispose();
     _remarkCtrl.dispose();
     super.dispose();
@@ -510,6 +512,7 @@ class _AddMachinePageState extends State<AddMachinePage> {
         remark: _remarkCtrl.text.trim(),
         // 实名核对用的两项：姓名 + 身份证后 6 位（后端只填空位，不覆盖已有值）
         contactName: _nameCtrl.text.trim(),
+        merchantName: _merchantCtrl.text.trim(),
         idTail: normalizeInstallIdTail(_idTailCtrl.text),
       );
       if (!mounted) return;
@@ -782,6 +785,15 @@ class _AddMachinePageState extends State<AddMachinePage> {
                     ],
                     validator: _validatePhone,
                     decoration: installInputDecoration('申请时填写的使用人手机号'),
+                  ),
+                ),
+                merchantField: installField(
+                  '商户名称',
+                  child: TextFormField(
+                    controller: _merchantCtrl,
+                    textInputAction: TextInputAction.next,
+                    inputFormatters: [LengthLimitingTextInputFormatter(64)],
+                    decoration: installInputDecoration('如：张记便利店（选填）'),
                   ),
                 ),
                 idTailController: _idTailCtrl,

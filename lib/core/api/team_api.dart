@@ -3,6 +3,7 @@ import '../models/enter_room_result.dart';
 import '../models/page_result.dart';
 import '../models/room_package.dart';
 import '../models/team_room.dart';
+import '../models/upgrade_prompt.dart';
 
 /// 团队接口（`/team/*`），全部需 app token。
 ///
@@ -84,6 +85,28 @@ class TeamApi {
       },
     );
     return EnterRoomResult.fromJson(json);
+  }
+
+  /// 升级提示（`GET /team/upgrade-prompt`）。
+  ///
+  /// 返回 null 表示不弹：已 L2、没有待定冻结奖励、目标档位不可进。
+  /// 返回非空且 `canUpgrade` 为 true 时才真正弹「是否升级」。
+  Future<UpgradePrompt?> upgradePrompt() async {
+    final json = await _api.get<Map<String, dynamic>?>('/team/upgrade-prompt');
+    if (json == null) return null;
+    return UpgradePrompt.fromJson(json);
+  }
+
+  /// 升级二选一（`POST /team/upgrade-prompt/choice`）。
+  ///
+  /// [upgrade] = true 自动进下一档房间并解冻冻结奖励给本人；
+  /// false = 放弃升级，冻结奖励立即转给直接推荐人（无推荐人兜底给自己）。
+  Future<UpgradeChoiceResult> chooseUpgrade({required bool upgrade}) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/team/upgrade-prompt/choice',
+      body: {'choice': upgrade ? 'upgrade' : 'decline'},
+    );
+    return UpgradeChoiceResult.fromJson(json);
   }
 }
 

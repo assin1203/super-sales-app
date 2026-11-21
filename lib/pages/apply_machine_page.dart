@@ -70,41 +70,6 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
   String? _selfName;
   String? _selfPhone;
 
-  /// 品牌 / 类型 / 所属平台（后台字典维护；三项都是选填，加载失败留空不阻断申请）
-  List<PosBrandOption> _brands = const [];
-  List<PosTypeOption> _types = const [];
-  List<PosPlatformOption> _platforms = const [];
-  String? _brandId;
-  String? _typeId;
-  String? _platformId;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadDicts();
-  }
-
-  /// 三个下拉从后台字典取，失败只当空列表：申请本身不依赖它们，不能因字典抖动挡住提交
-  Future<void> _loadDicts() async {
-    final brands = await _fetchOrNull(_api.brands);
-    final types = await _fetchOrNull(_api.types);
-    final platforms = await _fetchOrNull(_api.platforms);
-    if (!mounted) return;
-    setState(() {
-      _brands = brands ?? const [];
-      _types = types ?? const [];
-      _platforms = platforms ?? const [];
-    });
-  }
-
-  Future<T?> _fetchOrNull<T>(Future<T> Function() load) async {
-    try {
-      return await load();
-    } on ApiException {
-      return null;
-    }
-  }
-
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -289,9 +254,6 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
         address: _addressCtrl.text.trim(),
         remark: _remarkCtrl.text.trim(),
         proofImages: proofUrls,
-        brandId: _brandId,
-        typeId: _typeId,
-        platformId: _platformId,
       );
       if (!mounted) return;
       final status = result.statusName.isEmpty ? '已提交' : result.statusName;
@@ -363,46 +325,6 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
               ),
               if (_useType == 2)
                 _labeled('使用人验证码', required: true, child: _codeField()),
-              _labeled(
-                '品牌',
-                child: _dictDropdown(
-                  fieldKey: 'brand',
-                  value: _brandId,
-                  items: [
-                    for (final brand in _brands)
-                      DropdownMenuItem(value: brand.id, child: Text(brand.name)),
-                  ],
-                  hint: _brands.isEmpty ? '暂无可选品牌' : '请选择品牌',
-                  onChanged: (value) => setState(() => _brandId = value),
-                ),
-              ),
-              _labeled(
-                '类型',
-                child: _dictDropdown(
-                  fieldKey: 'type',
-                  value: _typeId,
-                  items: [
-                    for (final type in _types)
-                      DropdownMenuItem(value: type.id, child: Text(type.name)),
-                  ],
-                  hint: _types.isEmpty ? '暂无可选类型' : '请选择类型',
-                  onChanged: (value) => setState(() => _typeId = value),
-                ),
-              ),
-              _labeled(
-                '所属平台',
-                child: _dictDropdown(
-                  fieldKey: 'platform',
-                  value: _platformId,
-                  items: [
-                    for (final platform in _platforms)
-                      DropdownMenuItem(
-                          value: platform.id, child: Text(platform.name)),
-                  ],
-                  hint: _platforms.isEmpty ? '暂无可选平台' : '请选择所属平台',
-                  onChanged: (value) => setState(() => _platformId = value),
-                ),
-              ),
               _labeled(
                 '所在地区',
                 child: RegionPickerField(
@@ -940,27 +862,6 @@ class _ApplyMachinePageState extends State<ApplyMachinePage> {
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: Color(0xFF2E7BFF), width: 1.4),
       );
-
-  /// 品牌 / 类型 / 所属平台共用下拉
-  ///
-  /// 字典为空时禁用并提示「暂无可选」：点了没反应比直接置灰更难排查。
-  /// key 带当前值，选中后强制重建，避免复用旧下拉状态。
-  Widget _dictDropdown({
-    required String fieldKey,
-    required String? value,
-    required List<DropdownMenuItem<String>> items,
-    required String hint,
-    required ValueChanged<String?> onChanged,
-  }) {
-    return DropdownButtonFormField<String>(
-      key: ValueKey('$fieldKey-${value ?? ''}'),
-      initialValue: value,
-      isExpanded: true,
-      decoration: _inputDecoration(hint),
-      items: items,
-      onChanged: items.isEmpty ? null : onChanged,
-    );
-  }
 
   InputDecoration _inputDecoration(String hint) => InputDecoration(
         hintText: hint,

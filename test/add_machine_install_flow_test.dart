@@ -21,6 +21,7 @@ class _FakePosApi extends PosApi {
   String? installedMachineNo;
   String? installedIdTail;
   String? installedName;
+  String? installedMerchantName;
   int installedQueryCount = 0;
 
   /// 最近一次「核对已装机器」查的入参
@@ -73,6 +74,7 @@ class _FakePosApi extends PosApi {
     installedMachineNo = machineNo;
     installedIdTail = idTail;
     installedName = contactName;
+    installedMerchantName = merchantName;
     return MachineApply(
       applyId: applyId,
       machineNo: machineNo ?? '',
@@ -126,11 +128,12 @@ Future<void> _openPage(WidgetTester tester, PosApi api) async {
 
 /// 填完姓名/手机号/身份证 → 核对已装机器 → 确认 → 提交
 ///
-/// 表单顺序：机器号 / 客户姓名 / 客户手机号 / 身份证后 6 位 / 流量费备注 / 备注
+/// 表单顺序：机器号 / 客户姓名 / 客户手机号 / 商户名称 / 身份证后 6 位 / 流量费备注 / 备注
 Future<void> _fillPhoneAndSubmit(WidgetTester tester, String phone) async {
   await tester.enterText(find.byType(TextFormField).at(1), '张三');
   await tester.enterText(find.byType(TextFormField).at(2), phone);
-  await tester.enterText(find.byType(TextFormField).at(3), '123456');
+  await tester.enterText(find.byType(TextFormField).at(3), '测试商户');
+  await tester.enterText(find.byType(TextFormField).at(4), '123456');
 
   // 核对是提交前的强制步骤：不确认就会被拦在提交之外
   await tester.tap(find.text('核对已装机器'));
@@ -261,7 +264,8 @@ void main() {
     await _openPage(tester, api);
     await tester.enterText(find.byType(TextFormField).at(1), '张三');
     await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
-    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+    await tester.enterText(find.byType(TextFormField).at(3), '王记便利店');
+    await tester.enterText(find.byType(TextFormField).at(4), '123456');
     await tester.tap(find.text('确认添加'));
     await tester.pumpAndSettle();
 
@@ -294,7 +298,8 @@ void main() {
     await _openPage(tester, api);
     await tester.enterText(find.byType(TextFormField).at(1), '张三');
     await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
-    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+    await tester.enterText(find.byType(TextFormField).at(3), '王记便利店');
+    await tester.enterText(find.byType(TextFormField).at(4), '123456');
 
     await tester.tap(find.text('核对已装机器'));
     await tester.pumpAndSettle();
@@ -330,7 +335,8 @@ void main() {
     await _openPage(tester, api);
     await tester.enterText(find.byType(TextFormField).at(1), '张三');
     await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
-    await tester.enterText(find.byType(TextFormField).at(3), '12345x');
+    await tester.enterText(find.byType(TextFormField).at(3), '王记便利店');
+    await tester.enterText(find.byType(TextFormField).at(4), '12345x');
 
     await tester.tap(find.text('核对已装机器'));
     await tester.pumpAndSettle();
@@ -344,6 +350,36 @@ void main() {
     expect(api.installedApplyIds, ['61']);
     expect(api.installedIdTail, '12345X');
     expect(api.installedName, '张三');
+  });
+
+  testWidgets('商户名称选填：填了就随装机提交', (tester) async {
+    final api = _FakePosApi(
+      preview: PendingInstallPreview(
+        found: true,
+        phone: '139****1111',
+        total: 1,
+        message: '',
+        items: [_pending(applyId: '81')],
+      ),
+    );
+
+    await _openPage(tester, api);
+    await tester.enterText(find.byType(TextFormField).at(1), '张三');
+    await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
+    await tester.enterText(find.byType(TextFormField).at(3), '王记便利店');
+    await tester.enterText(find.byType(TextFormField).at(4), '123456');
+
+    await tester.tap(find.text('核对已装机器'));
+    await tester.pumpAndSettle();
+    final confirm = find.text('确认无误，继续装机');
+    await tester.tap(confirm.evaluate().isNotEmpty ? confirm : find.text('确认，继续装机'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('确认添加'));
+    await tester.pumpAndSettle();
+
+    expect(api.installedApplyIds, ['81']);
+    expect(api.installedMerchantName, '王记便利店');
   });
 
   testWidgets('核对后改客户手机号：核对结果作废，提交被拦下', (tester) async {
@@ -360,7 +396,8 @@ void main() {
     await _openPage(tester, api);
     await tester.enterText(find.byType(TextFormField).at(1), '张三');
     await tester.enterText(find.byType(TextFormField).at(2), '13900001111');
-    await tester.enterText(find.byType(TextFormField).at(3), '123456');
+    await tester.enterText(find.byType(TextFormField).at(3), '王记便利店');
+    await tester.enterText(find.byType(TextFormField).at(4), '123456');
 
     await tester.tap(find.text('核对已装机器'));
     await tester.pumpAndSettle();

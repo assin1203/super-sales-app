@@ -285,6 +285,30 @@ class PosApi {
     return NewbieSubmitResult.fromJson(json);
   }
 
+  /// 新手达标待确认机器（`GET /pos/newbie/confirmations`）。
+  ///
+  /// 归属用户与装机人各自登录都能查到；自己确认过的机器不再返回，
+  /// 所以返回非空就代表「有我还没确认的机器」，App 每次打开 / 回到前台拉一次。
+  Future<List<NewbieConfirmPending>> pendingNewbieConfirms() async {
+    final list = await _api.get<List<dynamic>>('/pos/newbie/confirmations');
+    return list
+        .whereType<Map<String, dynamic>>()
+        .map(NewbieConfirmPending.fromJson)
+        .toList();
+  }
+
+  /// 新手达标多选确认（`POST /pos/newbie/confirm`）。
+  ///
+  /// 归属用户与装机人都确认后后端自动置达标；累计流水未达门槛时不通过，
+  /// 逐台结果放在 [NewbieConfirmResponse.items] 里（reason/message 直接展示）。
+  Future<NewbieConfirmResponse> confirmNewbie(List<String> sns) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/pos/newbie/confirm',
+      body: {'sns': sns},
+    );
+    return NewbieConfirmResponse.fromJson(json);
+  }
+
   /// 品牌下拉（后台 /admin/pos/brands 维护，仅返回启用项，sort 升序）
   Future<List<PosBrandOption>> brands() async {
     final json = await _api.get<Map<String, dynamic>>('/pos/brands');

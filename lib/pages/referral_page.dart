@@ -25,6 +25,10 @@ class ReferralPage extends StatefulWidget {
 }
 
 class _ReferralPageState extends State<ReferralPage> {
+  /// 「复制推广链接」下方的模块（统计 / 三级人数分布 / 下级明细）当前不展示，
+  /// 推广页只保留推广码与二维码；需要恢复时改成 true。
+  static const bool _showSections = false;
+
   InviteSummary _summary = InviteSummary.empty;
   List<InviteRecord> _records = const [];
   bool _loading = true;
@@ -53,16 +57,19 @@ class _ReferralPageState extends State<ReferralPage> {
       _error = null;
     });
     try {
-      final results = await Future.wait([
-        userApi.invite(),
-        userApi.inviteRecords(pageSize: 50),
-      ]);
+      final summary = await userApi.invite();
       if (!mounted) return;
-      setState(() {
-        _summary = results[0] as InviteSummary;
-        _records = (results[1] as dynamic).items as List<InviteRecord>;
-        _error = null;
-      });
+      setState(() => _summary = summary);
+      // 区块隐藏时不再白拉 50 条下级明细；明细失败只影响它自己的区块，
+      // 不能连带把推广码清成「——」（推广码只依赖 invite 接口）。
+      if (_showSections) {
+        try {
+          final records = (await userApi.inviteRecords(pageSize: 50)).items;
+          if (mounted) setState(() => _records = records);
+        } on ApiException catch (e) {
+          if (mounted) setState(() => _error = e.displayMessage);
+        }
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
@@ -131,8 +138,35 @@ class _ReferralPageState extends State<ReferralPage> {
             _codeCard(),
             const SizedBox(height: 12),
             _qrCard(),
-            const SizedBox(height: 12),
-            ..._sections(),
+            // 区块隐藏时错误提示也在可见区给出来，否则失败只会留下一句「生成中…」
+            if (!_showSections && _error != null) ...[
+              const SizedBox(height: 12),
+              _errorCard(),
+            ],
+            if (_showSections) ...[
+              const SizedBox(height: 12),
+              ..._sections(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 失败提示 + 重试：统计区与「区块隐藏时」的可见区共用
+  Widget _errorCard() {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            const Icon(Icons.cloud_off_outlined, size: 36, color: Colors.black26),
+            const SizedBox(height: 8),
+            Text(_error ?? '加载失败，请稍后重试',
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 13, color: Colors.black54)),
+            TextButton(onPressed: _load, child: const Text('重试')),
           ],
         ),
       ),
@@ -156,26 +190,7 @@ class _ReferralPageState extends State<ReferralPage> {
       ];
     }
     if (_error != null) {
-      return [
-        Card(
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: [
-                const Icon(Icons.cloud_off_outlined,
-                    size: 36, color: Colors.black26),
-                const SizedBox(height: 8),
-                Text(_error!,
-                    textAlign: TextAlign.center,
-                    style:
-                        const TextStyle(fontSize: 13, color: Colors.black54)),
-                TextButton(onPressed: _load, child: const Text('重试')),
-              ],
-            ),
-          ),
-        ),
-      ];
+      return [_errorCard()];
     }
     return [
       _statsCard(),
@@ -310,19 +325,19 @@ class _ReferralPageState extends State<ReferralPage> {
                 child: Text('——', style: TextStyle(color: Colors.black26)),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           Text(
             _summary.inviteCode.isEmpty ? '——' : _summary.inviteCode,
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 26,
               fontWeight: FontWeight.w600,
               letterSpacing: 2,
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           const Text('超级展业 · 邀请注册',
-              style: TextStyle(fontSize: 10, color: Colors.black38)),
+              style: TextStyle(fontSize: 20, color: Colors.black38)),
         ],
       ),
     );

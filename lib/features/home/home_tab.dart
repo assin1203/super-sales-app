@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/api/home_api.dart';
+import '../../core/api/message_api.dart';
 import '../../core/api/notice_api.dart';
 import '../../core/api/points_api.dart';
 import '../../core/api/pos_api.dart';
@@ -21,6 +22,7 @@ import '../../core/models/task_item.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
 import '../../core/widgets/async_view.dart';
+import '../../core/widgets/unread_badge.dart';
 import '../team/enter_room_flow.dart';
 
 /// 首页：广告轮播 / 购买升级礼包 / 机器达标监控 / 平台公告
@@ -29,7 +31,7 @@ import '../team/enter_room_flow.dart';
 /// - `GET /home/banners`（空时用本地兜底图，不算错误）
 /// - `GET /team/room-packages`（入房档位，只展示未购买的档位）
 /// - `GET /user/points`（入房前判断积分是否够）
-/// - `GET /pos/machines`（取第一台展示达标进度）
+/// - `GET /pos/machines`（取本人全部机器，按是否达标筛出待监控的）
 ///
 /// 已购买的档位整卡不展示：买过就不再需要「购买升级礼包」入口，
 /// 仍可从「我的团队」进入房间。
@@ -44,10 +46,13 @@ class _HomeTabState extends State<HomeTab> {
   List<BannerItem> _banners = const [];
   List<NoticeItem> _notices = const [];
   List<RoomPackage> _roomPackages = const [];
-  Machine? _machine;
+  List<Machine> _machines = const [];
   List<TaskItem> _newbieTasks = const [];
   PointsSummary? _points;
   bool _loading = true;
+
+  /// 站内消息未读数（首页顶部消息入口的红点）
+  int _unread = 0;
 
   @override
   void initState() {
@@ -82,11 +87,22 @@ class _HomeTabState extends State<HomeTab> {
       await Future.wait([
         _loadRoomPackages(),
         _loadPoints(),
-        _loadMachine(),
+        _loadMachines(),
         _loadTasks(),
+        _loadUnread(),
       ]);
     }
     if (mounted) setState(() => _loading = false);
+  }
+
+  /// 未读数只驱动红点：失败静默（不打断首屏其它模块）
+  Future<void> _loadUnread() async {
+    try {
+      final unread = await messageApi.unreadCount();
+      if (mounted) setState(() => _unread = unread);
+    } on ApiException {
+      // 消息模块不可用时保留上一次数字，不弹错
+    }
   }
 
   Future<void> _loadRoomPackages() async {
@@ -107,14 +123,24 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  Future<void> _loadMachine() async {
+  /// 拉本人全部机器：首页只展示未达标且窗口未过期的，达标的不再占位。
+  ///
+  /// `/pos/machines` 是分页接口，只取第一页会让第 21 台起的机器静默消失——
+  /// 而这张卡存在的意义正是防止漏掉达标窗口，所以按 total 续页收齐。
+  Future<void> _loadMachines() async {
     try {
-      final page = await posApi.machines(pageSize: 1);
-      if (mounted) {
-        setState(() => _machine = page.items.isEmpty ? null : page.items.first);
+      final all = <Machine>[];
+      var pageNum = 1;
+      while (true) {
+        final page = await posApi.machines(pageNum: pageNum, pageSize: 20);
+        all.addAll(page.items);
+        // items 为空即兜底退出：total 与实际条数不一致时不会死循环
+        if (page.items.isEmpty || all.length >= page.total) break;
+        pageNum++;
       }
+      if (mounted) setState(() => _machines = all);
     } on ApiException {
-      if (mounted) setState(() => _machine = null);
+      if (mounted) setState(() => _machines = const []);
     }
   }
 
@@ -141,6 +167,7 @@ class _HomeTabState extends State<HomeTab> {
         children: [
           _AdCarousel(banners: _banners),
           const SizedBox(height: 12),
+          _messageEntryCard(),
           _applyEntryCard(),
           _noticeCard(),
           // 购买升级礼包：只展示「未购买」的档位，买过的整卡不出现
@@ -151,7 +178,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           const SizedBox(height: 12),
           // 会员等级与任务中心入口按运营要求暂时下线（组件保留，恢复时加回这两行）
-          _machineCard(context),
+          _machineMonitor(context),
           if (_loading)
             const Padding(
               padding: EdgeInsets.only(top: 12),
@@ -164,6 +191,71 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  // ---------- 站内消息入口（团队长装机提醒等） ----------
+
+  /// 有未读时卡片描边变主色并显示数字，避免装机人漏掉下级的装机申请
+  Widget _messageEntryCard() {
+    final hasUnread = _unread > 0;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () async {
+          await context.push('/messages');
+          // 从消息页回来刷新红点（点开详情后端已置已读）
+          if (mounted) await _loadUnread();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: hasUnread ? kqwPrimary.withValues(alpha: 0.35) : const Color(0xFFEDEFF3),
+            ),
+          ),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 38,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: kqwPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.notifications_none, size: 22, color: kqwPrimary),
+                  ),
+                  if (hasUnread) UnreadBadge(count: _unread),
+                ],
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '站内消息',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Color(0xFF1F2430)),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hasUnread ? '你有 $_unread 条未读消息' : '下级装机申请等业务通知',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF8A94A6)),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 20, color: Color(0xFFB6BDC9)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -444,44 +536,76 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // ---------- 机器达标监控（25 天 / 1000 元） ----------
+  // ---------- 机器达标监控（只列未达标且窗口未过期的机器） ----------
 
-  Widget _machineCard(BuildContext context) {
-    final machine = _machine;
-    if (machine == null) {
-      return Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(16),
-          onTap: () => context.push('/machines'),
-          child: const Padding(
-            padding: EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.point_of_sale, color: kqwPrimary),
-                SizedBox(width: 8),
-                Expanded(
-                    child: Text('机器达标监控',
-                        style: TextStyle(fontWeight: FontWeight.w600))),
-                Text('未绑定机器', style: TextStyle(color: Colors.black45, fontSize: 12)),
-                SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 18, color: kqwTextSecondary),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
+  Widget _machineMonitor(BuildContext context) {
+    final monitoring = _machines.where((m) => m.needsMonitor).toList();
+    if (monitoring.isEmpty) return _machineEmptyCard(context);
+    // 装机多的业务员可能十几张卡：按需构建，避免首页每次 setState 全量重建
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: monitoring.length,
+      itemBuilder: (context, i) => _monitorCard(context, i + 1, monitoring[i]),
+    );
+  }
 
-    final progress = machine.progress;
-    final statusColor = machine.finished
-        ? const Color(0xFF3F8600)
-        : machine.newbieStatus == 2
-            ? kqwPrimary
-            : const Color(0xFFB25E00);
+  /// 空态文案按真实原因区分：全部达标与「窗口已过期但没达标」是两种结论，
+  /// 后者显示成「机器均已达标」等于把丢了奖励说成好消息。
+  String get _machineEmptyHint {
+    if (_machines.isEmpty) return '未绑定机器';
+    if (_machines.every((m) => m.reachedTarget)) return '机器均已达标';
+    if (_machines.any((m) => m.progress.expired)) return '达标窗口已结束';
+    return '暂无需跟进';
+  }
 
+  /// 没有需要监控的机器时的入口卡（未绑机器 / 都已达标 / 窗口已结束都走这里）
+  Widget _machineEmptyCard(BuildContext context) {
+    final hint = _machineEmptyHint;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.push('/machines'),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              const Icon(Icons.point_of_sale, color: kqwPrimary),
+              const SizedBox(width: 8),
+              const Expanded(
+                  child: Text('机器达标监控',
+                      style: TextStyle(fontWeight: FontWeight.w600))),
+              Text(hint,
+                  style: const TextStyle(color: Colors.black45, fontSize: 12)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 18, color: kqwTextSecondary),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 单台未达标机器：左侧剩余天数大字，右侧门店名 + 机号，底部达标规则
+  Widget _monitorCard(BuildContext context, int index, Machine machine) {
+    final statusColor = machine.newbieStatus == 2
+        ? kqwPrimary
+        : machine.newbieStatus == 1
+            ? const Color(0xFFB25E00)
+            : Colors.black45;
+    // 每次 build 都按当前时间重算，页面重新打开/下拉刷新都会刷新天数
+    final daysLeft = machine.daysLeftToReach;
+    final statusName = machine.newbieStatusName.isNotEmpty
+        ? machine.newbieStatusName
+        : (machine.finished ? '已完成' : '进行中');
+    final merchant = machine.merchantName?.trim() ?? '';
+    final shopLabel = merchant.isEmpty
+        ? (machine.model.isEmpty ? '未命名门店' : machine.model)
+        : merchant;
+
+    return Card(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => context.push('/machines'),
@@ -492,11 +616,12 @@ class _HomeTabState extends State<HomeTab> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.point_of_sale, color: kqwPrimary),
+                  const Icon(Icons.point_of_sale, color: kqwPrimary, size: 20),
                   const SizedBox(width: 8),
-                  const Expanded(
-                      child: Text('机器达标监控',
-                          style: TextStyle(fontWeight: FontWeight.w600))),
+                  Expanded(
+                    child: Text('机器达标监控（$index）',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -505,9 +630,7 @@ class _HomeTabState extends State<HomeTab> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
-                      machine.newbieStatusName.isEmpty
-                          ? (machine.finished ? '已完成' : '进行中')
-                          : machine.newbieStatusName,
+                      statusName,
                       style: TextStyle(
                           color: statusColor,
                           fontSize: 12,
@@ -516,39 +639,71 @@ class _HomeTabState extends State<HomeTab> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(
-                    child: _machineStat(
-                      '已刷金额',
-                      '¥${progress.amount} / ¥${progress.target}',
-                      progress.ratio,
+                  SizedBox(
+                    width: 100,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('达标剩余天数',
+                            style: TextStyle(
+                                color: Colors.black54, fontSize: 12)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$daysLeft天',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: daysLeft <= 3
+                                ? const Color(0xFFE53935)
+                                : kqwPrimary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  Container(width: 1, height: 42, color: const Color(0xFFEEEEEE)),
+                  const SizedBox(width: 14),
                   Expanded(
-                    child: _machineStat(
-                      '剩余天数',
-                      '${progress.daysLeft} 天',
-                      (progress.daysLeft / 25).clamp(0.0, 1.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          shopLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          machine.sn,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.black45, fontSize: 12),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.info_outline, size: 14, color: Colors.black45),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${machine.sn} · 期限 25 天，刷满 ${progress.target} 元即达标，达标送积分并入队',
-                      style: const TextStyle(
-                          color: Colors.black45, fontSize: 12),
-                    ),
-                  ),
-                ],
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F7F9),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  _monitorRuleText(machine),
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -557,25 +712,22 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _machineStat(String label, String value, double progress) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: const TextStyle(color: Colors.black54, fontSize: 12)),
-        const SizedBox(height: 4),
-        Text(value,
-            style:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: LinearProgressIndicator(value: progress, minHeight: 6),
-        ),
-      ],
-    );
+  /// 达标规则：从装机之日起 N 天内刷卡累计 X 元奖励 Y 积分
+  String _monitorRuleText(Machine machine) {
+    final window = machine.windowDays > 0 ? '${machine.windowDays}天' : '任务期内';
+    final amount = _moneyLabel(machine.progress.target);
+    final points = _moneyLabel(machine.taskSelfPoints);
+    final reward = points == '0' ? '' : '奖励$points积分';
+    return '从装机之日起$window内刷卡累计$amount元$reward';
+  }
+
+  /// 金额/积分去掉尾随的 .00（接口下发字符串，这里只做展示格式化）
+  String _moneyLabel(String raw) {
+    final value = double.tryParse(raw);
+    if (value == null) return raw;
+    return value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
   }
 
   // ---------- 任务中心（进度 + 入口） ----------

@@ -42,13 +42,15 @@
 | 订单 | `POST /mall/orders/{id}/confirm` | `mall_api.dart#confirm` | `orders_page.dart` 确认收货 |
 | 地址 | `GET/POST /user/addresses`、`PUT/DELETE /user/addresses/{id}`、`POST /user/addresses/{id}/default` | `address_api.dart` | `addresses_page.dart` |
 | 机器 | `GET /pos/machines`、`GET /pos/machines/{sn}` | `pos_api.dart` | `machines_page.dart`、首页达标卡 |
+| 机器 | 上述两个接口每台机器另含 `merchantName`（门店名快照，自装机为 null）、`installedAt`/`dueAt`（达标窗口起止）、`windowDays`（窗口天数）、`taskSelfPoints`（达标可得积分） | `machine.dart#Machine` | 首页「机器达标监控」多卡片列表：只列**未达标且窗口未过期**的机器，剩余天数按 `dueAt` 每次打开实时重算（不用接口下发的 `daysLeft` 快照） |
 | 机器 | `POST /pos/apply`（`proofImages` 装机凭证截图 URL 数组 ≤4 张，选填，先调 `POST /common/upload/image`；说明见 `install_guide_page.dart`）、`POST /pos/newbie/submit` | `pos_api.dart` | `apply_machine_page.dart` 装机申请（首页入口，凭证截图区在申请信息下方）、`machines_page.dart` 新手机器提交 |
+| 机器 | `GET /pos/newbie/confirmations`（我能确认的机器：我是归属用户或装机人、已提交达标、未达标、我还没确认；含门店名/机号/累计流水/门槛/剩余天数/对方是否已确认）、`POST /pos/newbie/confirm`（`{sns:[…]}` 一次 1~20 台，逐台返回 `confirmed`/`settled`/`reason`/`message`）。**双方都确认且累计流水达门槛 → 自动达标发奖**；流水不足只记录确认不通过，仍由后台人工处理 | `pos_api.dart#pendingNewbieConfirms`、`pos_api.dart#confirmNewbie` | `shell_layout.dart` 冷启动 / 回前台弹多选框（自己确认过的不再返回，已达标也不再返回）。**0.2.3 起默认关闭**：`enableDialogs` 为 `false` 时不再请求本接口、也不再弹框，代码与接口保留 |
 | 机器 | `POST /pos/apply/verify-phone`（他人使用先验证使用人手机号：校验验证码 → 号码未注册则自动建号并把当前用户绑为推广人 → 写 10 分钟有效标记，`POST /pos/apply` 提交时消费；错码/过期 400） | `pos_api.dart#verifyApplyPhone` | `apply_machine_page.dart` 他人使用（发码前先过拼图滑块） |
 | 机器 | `GET /pos/applies`（`status`/`source` 筛选） | `pos_api.dart#applies` | `machines_page.dart`「已提交」列表 |
 | 机器 | `POST /pos/applies/{id}/install`（`installMode` 1 平台安装 / 2 用户自装；补录 `bootTime`/`contactName`/`merchantName`/`region`/`address`/`remark`/`trafficFeeRemark`；后端 `proofImages` 字段保留，App 不再上传） | `pos_api.dart#installApply` | `machines_page.dart` 已通过申请「立即装机」、`add_machine_page.dart` 装机页（先查到 `applyId` 再调它） |
 | 机器 | `GET /pos/applies/pending-by-phone`（按手机号查待装机申请，返回 `PendingInstallPreview`：0 条给提示、1 条直接装、多条弹选择） | `pos_api.dart#pendingAppliesByPhone` | `add_machine_page.dart`「安装 POS 机」第一步 |
 | 机器 | `POST /pos/applies/install`（服务端按手机号直接装机） | `pos_api.dart#installApplyByPhone`（**死代码：全仓无调用方**） | 未使用，装机统一走 `pendingAppliesByPhone` + `installApply`，保留待清理 |
-| 机器 | `GET /pos/brands`、`GET /pos/types`（品牌/类型下拉，仅下发 `status=1` 且按 `sort` 升序） | `pos_api.dart#brands` / `#types` | `add_machine_page.dart` 表单、`machines_page.dart` 装机弹窗 |
+| 机器 | `GET /pos/brands`、`GET /pos/types`（品牌/类型下拉，仅下发 `status=1` 且按 `sort` 升序） | `pos_api.dart#brands` / `#types` | `add_machine_page.dart` 表单、`install_apply_page.dart` 装机独立页 |
 | 机器 | `POST /common/upload/image`（multipart 字段 `file`，jpg/png/gif/webp ≤5MB，返回 `{url,key,size}`） | `api_client.dart#uploadImage` | 申请凭证截图、头像上传 |
 | 机器 | `POST /pos/machines`（`MachineCreateDto`，直接建机） | `pos_api.dart#addMachine` | 已无页面调用，装机统一走 `pendingAppliesByPhone` + `POST /pos/applies/{id}/install` |
 | 任务 | `GET /tasks`、`GET /tasks/{code}`、`POST /tasks/{code}/claim` | `task_api.dart` | `task_tab.dart`、首页任务卡 |
@@ -57,6 +59,7 @@
 | 团队 | `GET /team/room-packages`（档位列表，按 `sort` 升序） | `team_api.dart#roomPackages` | `home_tab.dart` 房间档位卡 |
 | 团队 | `POST /team/rooms/enter`（`packageId` 选填，缺省默认档；回执含 `entryPoints`/`purchased`/`uplineId`/`rebound`）。**入房顺序**：600 档（`ADVANCED`/lv2）要求先进入过 200 档（`BASIC`/lv1）房间，判据是 `room_op_log` 的 OCCUPY 记录（看是否真进过，不看 `user.level`），不满足 → 400 + `43005`「请先进入 200 档房间，再进入 600 档房间」；**入房费分成**：本次真扣了入房费时按 50% 分给等级推荐人，已购档位复用资格（`entryPoints=0`）不分成；`uplineId` 仍是贡献值命中者，与等级推荐人解耦 | `team_api.dart#enterRoom` | `enter_room_flow.dart`（首页/团队页共用；`room_package.dart#needsBasicRoomFirst` 提前提示顺序要求） |
 | 团队 | `GET /team/wait-queue` | `team_api.dart#waitQueue` | `team_tab.dart` 候补队列 |
+| 团队 | `GET /team/upgrade-prompt`（升级提示，无则返回空体）、`POST /team/upgrade-prompt/choice`（`choice` = `upgrade` / `decline`）。弹窗口径：名下**有待定冻结装机奖励** + 可用积分 ≥ 下一档礼包积分（已购档位则为 0）+ 未到 L2 才返回；`upgrade` 后端自动进下一档房间（`RoomEntryService.enter`，进房升级钩子同事务解冻奖励给本人），`decline` 待定奖励立即转直接推荐人（无推荐人兜底给自己）。**L2 不弹**，30 天到期转推荐人保留为兜底 | `team_api.dart#upgradePrompt`、`team_api.dart#chooseUpgrade` | `shell_layout.dart` 冷启动 / 回前台先弹升级、再弹达标确认。**0.2.3 起默认关闭**：`enableDialogs` 为 `false` 时不再请求本接口，浮结奖励只能等 30 天兜底转推荐人 |
 | 首页 | `GET /home/banners` | `home_api.dart#banners` | `home_tab.dart` 轮播（空则回落本地图） |
 | 支付 | `POST /payment/order`、`GET /payment/order/{id}` | `payment_api.dart` | 已封装，收银台待接 SDK |
 | 公共 | `POST /common/upload/image` | `api_client.dart#uploadImage` | `profile_page.dart` 头像 |

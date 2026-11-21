@@ -20,6 +20,27 @@ String revealOwnPhone(String masked, String? selfPhone) {
   return masked;
 }
 
+/// 流水是否达到门槛。
+///
+/// `target <= 0`（后端未下发门槛 / 历史机器未挂任务窗口）统一视为**未达标**，
+/// 与 [MachineProgress.ratio] 同一口径——否则 `0 >= 0` 会把流水为 0 的机器判成达标。
+bool ratioReached(String amount, String target) {
+  final a = double.tryParse(amount) ?? 0;
+  final t = double.tryParse(target) ?? 0;
+  if (t <= 0) return false;
+  return a >= t;
+}
+
+/// 截止时间 → 剩余天数：向上取整（不足 1 天按 1 天），已过期归 0。
+///
+/// [Machine.daysLeftToReach] 与 `NewbieConfirmPending.daysLeftLive` 共用这一份取整规则，
+/// 避免首页卡片与确认弹窗对同一台机器给出不同的天数。
+int reachDaysLeft(DateTime due, {DateTime? now}) {
+  final remain = due.difference(now ?? DateTime.now());
+  if (remain.isNegative) return 0;
+  return (remain.inSeconds / Duration.secondsPerDay).ceil();
+}
+
 /// 推荐人（手机号后端脱敏，仅暴露等级）
 class MachineReferrer {
   const MachineReferrer({required this.phone, required this.level});
@@ -89,6 +110,11 @@ class Machine {
     this.bootedAt,
     this.referredBy,
     this.newbieRejectReason,
+    this.merchantName,
+    this.installedAt,
+    this.dueAt,
+    this.windowDays = 0,
+    this.taskSelfPoints = '0',
   });
 
   final String sn;
@@ -104,10 +130,26 @@ class Machine {
   /// 新手任务最近一次驳回原因（仅驳回后、重新提交前有值）
   final String? newbieRejectReason;
 
+  /// 门店名称：申请单 merchant_name 快照（自装机或未填写为 null）
+  final String? merchantName;
+
+  /// 装机时间：达标窗口起点（历史脏数据可能为空）
+  final DateTime? installedAt;
+
+  /// 达标截止时间：剩余天数以它为准实时重算
+  final DateTime? dueAt;
+
+  /// 任务窗口天数快照（0 表示历史机器未挂任务窗口）
+  final int windowDays;
+
+  /// 达标可得积分快照（字符串，避免前端浮点误差）
+  final String taskSelfPoints;
+
   factory Machine.fromJson(Map<String, dynamic> json) {
     final rawProgress = json['progress'];
     final rawReferrer = json['referredBy'];
     final rawReason = (json['newbieRejectReason'] as String?)?.trim() ?? '';
+    final rawMerchant = (json['merchantName'] as String?)?.trim() ?? '';
     return Machine(
       sn: json['sn'] as String? ?? '',
       model: json['model'] as String? ?? '',
@@ -118,6 +160,11 @@ class Machine {
       newbieStatus: (json['newbieStatus'] as num?)?.toInt() ?? 0,
       newbieStatusName: json['newbieStatusName'] as String? ?? '',
       newbieRejectReason: rawReason.isEmpty ? null : rawReason,
+      merchantName: rawMerchant.isEmpty ? null : rawMerchant,
+      installedAt: DateTime.tryParse('${json['installedAt'] ?? ''}'),
+      dueAt: DateTime.tryParse('${json['dueAt'] ?? ''}'),
+      windowDays: (json['windowDays'] as num?)?.toInt() ?? 0,
+      taskSelfPoints: '${json['taskSelfPoints'] ?? '0'}',
       progress: rawProgress is Map
           ? MachineProgress.fromJson(rawProgress.cast<String, dynamic>())
           : const MachineProgress(amount: '0', target: '0', daysLeft: 0),
@@ -138,10 +185,48 @@ class Machine {
         newbieStatus: newbieStatus ?? this.newbieStatus,
         newbieStatusName: newbieStatusName ?? this.newbieStatusName,
         newbieRejectReason: clearRejectReason ? null : newbieRejectReason,
+        merchantName: merchantName,
+        installedAt: installedAt,
+        dueAt: dueAt,
+        windowDays: windowDays,
+        taskSelfPoints: taskSelfPoints,
         progress: progress,
       );
 
   bool get finished => newbieStatus == 3;
+
+  /// 是否已刷满达标金额（审核中的机器也可能已达标，这里只看金额）
+  bool get reachedTarget => ratioReached(progress.amount, progress.target);
+
+  /// 是否有有效的达标门槛：`target <= 0` 表示没挂任务窗口（历史机器）
+  bool get hasTarget => (double.tryParse(progress.target) ?? 0) > 0;
+
+  /// 首页「机器达标监控」是否收录：未达标、窗口未过期，且确实有任务门槛。
+  ///
+  /// 除「已达标」「窗口已过期」外还要排掉已完成（人工结算过）与没有门槛的历史机器，
+  /// 否则它们会永久占一张「0天 / 累计0元」的告警卡。
+  bool get needsMonitor =>
+      !finished && hasTarget && !reachedTarget && !progress.expired;
+
+  /// 剩余达标天数：每次打开按当前时间重算，不用接口下发时的快照值
+  ///
+  /// 优先用截止时间（装机时按任务窗口算好落库的那份），其次按装机日 + 窗口天数推算，
+  /// 两者都缺（历史机器未挂窗口）才退回接口下发的 daysLeft。
+  int get daysLeftToReach {
+    final due = _dueTime;
+    if (due == null) return progress.daysLeft;
+    return reachDaysLeft(due);
+  }
+
+  DateTime? get _dueTime {
+    final due = dueAt;
+    if (due != null) return due;
+    final start = installedAt ?? bootedAt;
+    if (start != null && windowDays > 0) {
+      return start.add(Duration(days: windowDays));
+    }
+    return null;
+  }
 }
 
 /// 机器时间线条目
@@ -168,6 +253,12 @@ class MachineDetail extends Machine {
     required super.progress,
     super.bootedAt,
     super.referredBy,
+    super.newbieRejectReason,
+    super.merchantName,
+    super.installedAt,
+    super.dueAt,
+    super.windowDays,
+    super.taskSelfPoints,
     this.qualifiedAt,
     this.rewardPoints = '0',
     this.rewardStatus = 0,
@@ -189,6 +280,12 @@ class MachineDetail extends Machine {
       model: base.model,
       bootedAt: base.bootedAt,
       referredBy: base.referredBy,
+      newbieRejectReason: base.newbieRejectReason,
+      merchantName: base.merchantName,
+      installedAt: base.installedAt,
+      dueAt: base.dueAt,
+      windowDays: base.windowDays,
+      taskSelfPoints: base.taskSelfPoints,
       newbieStatus: base.newbieStatus,
       newbieStatusName: base.newbieStatusName,
       progress: base.progress,
@@ -359,6 +456,138 @@ class NewbieSubmitResult {
         newbieStatus: (json['newbieStatus'] as num?)?.toInt() ?? 2,
         newbieStatusName: json['newbieStatusName'] as String? ?? '审核中',
         submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+      );
+}
+
+/// 新手达标待确认机器（`GET /pos/newbie/confirmations`）。
+///
+/// 归属用户与装机人各自登录都会拿到同一台机器；[counterpartConfirmed] 表示对方是否已确认。
+/// 自己确认过的机器不再返回，所以这个列表非空就代表「有我还没确认的机器」。
+class NewbieConfirmPending {
+  const NewbieConfirmPending({
+    required this.sn,
+    required this.model,
+    this.merchantName,
+    this.amount = '0',
+    this.target = '0',
+    this.dueAt,
+    this.daysLeft,
+    this.role = 'owner',
+    this.counterpartConfirmed = false,
+    this.submittedAt,
+  });
+
+  final String sn;
+  final String model;
+
+  /// 门店名称快照（自装机无申请单时为 null）
+  final String? merchantName;
+
+  /// 累计流水 / 达标门槛（后端字符串化，避免浮点误差）
+  final String amount;
+  final String target;
+
+  /// 达标截止时间：优先用它减去当前时间算剩余天数
+  final DateTime? dueAt;
+
+  /// 接口下发的剩余天数快照（仅 [dueAt] 缺失时兜底）
+  final int? daysLeft;
+
+  /// 本条记录里当前用户的身份：owner 归属用户 / installer 装机人
+  final String role;
+
+  /// 对方是否已确认（无需装机人确认时恒为 true）
+  final bool counterpartConfirmed;
+
+  final DateTime? submittedAt;
+
+  /// 卡片标题用的门店名：缺失时退回机器型号
+  String get storeLabel {
+    final name = merchantName?.trim() ?? '';
+    return name.isEmpty ? model : name;
+  }
+
+  /// 剩余天数：按 [dueAt] 与当前时间实时重算（接口下发的是响应时刻快照）
+  int? get daysLeftLive {
+    final due = dueAt;
+    if (due == null) return daysLeft;
+    return reachDaysLeft(due);
+  }
+
+  /// 流水是否已达门槛（只用于文案提示，是否通过始终由后端判定）
+  bool get reachedTarget => ratioReached(amount, target);
+
+  factory NewbieConfirmPending.fromJson(Map<String, dynamic> json) =>
+      NewbieConfirmPending(
+        sn: json['sn'] as String? ?? '',
+        model: json['model'] as String? ?? '',
+        merchantName: json['merchantName'] as String?,
+        amount: '${json['amount'] ?? '0'}',
+        target: '${json['target'] ?? '0'}',
+        dueAt: DateTime.tryParse('${json['dueAt'] ?? ''}'),
+        daysLeft: (json['daysLeft'] as num?)?.toInt(),
+        role: json['role'] as String? ?? 'owner',
+        counterpartConfirmed: json['counterpartConfirmed'] as bool? ?? false,
+        submittedAt: DateTime.tryParse('${json['submittedAt'] ?? ''}'),
+      );
+}
+
+/// 单台机器的确认结果（`POST /pos/newbie/confirm` 逐台返回）。
+class NewbieConfirmResult {
+  const NewbieConfirmResult({
+    required this.sn,
+    this.confirmed = false,
+    this.settled = false,
+    this.reason,
+    this.message = '',
+  });
+
+  final String sn;
+
+  /// 本次是否已记录确认（重复提交/此前已确认过也为 true）
+  final bool confirmed;
+
+  /// 是否因双方齐全而自动达标
+  final bool settled;
+
+  /// 未记录/未通过原因：not_found / qualified / not_submitted / forbidden / not_reached 等
+  final String? reason;
+
+  /// 后端给的可直接展示文案（流水不足等口径都在这里）
+  final String message;
+
+  factory NewbieConfirmResult.fromJson(Map<String, dynamic> json) =>
+      NewbieConfirmResult(
+        sn: json['sn'] as String? ?? '',
+        confirmed: json['confirmed'] as bool? ?? false,
+        settled: json['settled'] as bool? ?? false,
+        reason: json['reason'] as String?,
+        message: json['message'] as String? ?? '',
+      );
+}
+
+/// 多选确认出参（逐台结果 + 汇总提示）。
+class NewbieConfirmResponse {
+  const NewbieConfirmResponse({
+    this.items = const [],
+    this.settled = 0,
+    this.message = '',
+  });
+
+  final List<NewbieConfirmResult> items;
+
+  /// 本次确认后自动达标的台数
+  final int settled;
+  final String message;
+
+  factory NewbieConfirmResponse.fromJson(Map<String, dynamic> json) =>
+      NewbieConfirmResponse(
+        items: (json['items'] as List<dynamic>? ?? [])
+            .whereType<Map<String, dynamic>>()
+            .map(NewbieConfirmResult.fromJson)
+            .toList(),
+        settled: (json['settled'] as num?)?.toInt() ?? 0,
+        message: json['message'] as String? ?? '',
       );
 }
 

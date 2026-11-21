@@ -12,6 +12,8 @@ import '../pages/apply_machine_page.dart';
 import '../pages/forgot_password_page.dart';
 import '../pages/login_page.dart';
 import '../pages/machines_page.dart';
+import '../pages/message_detail_page.dart';
+import '../pages/messages_page.dart';
 import '../pages/orders_page.dart';
 import '../pages/packages_page.dart';
 import '../pages/password_page.dart';
@@ -32,7 +34,13 @@ import 'shell_layout.dart';
 ///
 /// [navigatorKey] 供启动时的「发现新版本」弹窗使用：main.dart 拿它的 context
 /// 才能在任何页面（含登录页）之上弹出对话框。
-GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey}) {
+/// [enableDialogs] 透传给 [ShellLayout]：控制冷启动/回前台的升级提示与机器达标确认
+/// 两个自动弹窗（默认关闭，测试里传 true 以覆盖弹窗链路）。
+GoRouter appRouter(
+  AuthProvider auth, {
+  GlobalKey<NavigatorState>? navigatorKey,
+  bool enableDialogs = false,
+}) {
   return GoRouter(
     navigatorKey: navigatorKey,
     initialLocation: auth.loggedIn ? '/' : '/login',
@@ -48,7 +56,7 @@ GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey})
         builder: (context, state) => const ForgotPasswordPage(),
       ),
       ShellRoute(
-        builder: (context, state, child) => ShellLayout(child: child),
+        builder: (context, state, child) => ShellLayout(enableDialogs: enableDialogs, child: child),
         routes: [
           GoRoute(path: '/', builder: (c, s) => const HomeTab()),
           GoRoute(path: '/mall', builder: (c, s) => const MallTab()),
@@ -63,6 +71,12 @@ GoRouter appRouter(AuthProvider auth, {GlobalKey<NavigatorState>? navigatorKey})
           path: '/points/transfer',
           builder: (c, s) => const PointsTransferPage()),
       GoRoute(path: '/points-flow', builder: (c, s) => const PointsFlowPage()),
+      // 站内消息：装机提醒等业务通知，从首页铃铛与「我的」宫格进入
+      GoRoute(path: '/messages', builder: (c, s) => const MessagesPage()),
+      GoRoute(
+        path: '/messages/:id',
+        builder: (c, s) => MessageDetailPage(messageId: s.pathParameters['id']!),
+      ),
       GoRoute(path: '/orders', builder: (c, s) => const OrdersPage()),
       GoRoute(path: '/addresses', builder: (c, s) => const AddressesPage()),
       GoRoute(path: '/referral', builder: (c, s) => const ReferralPage()),

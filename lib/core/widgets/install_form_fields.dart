@@ -5,9 +5,9 @@ import '../models/machine.dart';
 
 /// 装机表单的共享字段与样式。
 ///
-/// 「安装 POS 机」页（`AddMachinePage`）和机器列表里的装机弹窗（`_InstallDialog`）收的是同一张表单：
+/// 「安装 POS 机」页（`AddMachinePage`）和申请列表里的按单装机页（`InstallApplyPage`）收的是同一张表单：
 /// 安装方式、机器号、品牌、类型、流量费备注、开机时间、备注。两边各写一份的后果是漂移——
-/// 历史上弹窗就漏了流量费备注，业务员在弹窗里装机时这一项永远传不上去。
+/// 历史上这个装机入口（早期是弹窗）就漏了流量费备注，业务员在这里装机时这一项永远传不上去。
 /// 字段集合、校验入口和样式统一收在这里，改一处两边同时生效。
 
 /// 身份证号后 6 位归一化：去空格 + 末位 X 统一大写。
@@ -170,6 +170,7 @@ class InstallFormFields extends StatelessWidget {
     this.contactNameController,
     this.contactNameValidator,
     this.phoneField,
+    this.merchantField,
     this.idTailController,
     this.idTailValidator,
     this.identityCheck,
@@ -212,6 +213,9 @@ class InstallFormFields extends StatelessWidget {
 
   /// 装机页把「客户手机号」插在机器号之后；弹窗按申请单装机，不需要
   final Widget? phoneField;
+
+  /// 商户名称（选填）：装机页填在客户手机号之后，弹窗按申请单装机不需要
+  final Widget? merchantField;
 
   /// 客户身份证号后 6 位（实名核对，装机必填）：手机号之后插入
   final TextEditingController? idTailController;
@@ -280,6 +284,7 @@ class InstallFormFields extends StatelessWidget {
             ),
           ),
         if (phoneField != null) phoneField!,
+        if (merchantField != null) merchantField!,
         if (idTailController != null)
           installField(
             '身份证号后 6 位',

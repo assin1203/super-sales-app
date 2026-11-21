@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/api/message_api.dart';
 import '../../core/api/points_api.dart';
 import '../../core/api_client.dart';
 import '../../core/app_update.dart';
@@ -10,6 +13,7 @@ import '../../core/auth_provider.dart';
 import '../../core/models/points_summary.dart';
 import '../../core/theme.dart';
 import '../../core/toast.dart';
+import '../../core/widgets/unread_badge.dart';
 
 /// 我的（个人中心）：账户信息 + 积分 + 订单快捷 + 全部功能入口
 ///
@@ -28,6 +32,9 @@ class _MeTabState extends State<MeTab> {
   PointsSummary _points = PointsSummary.empty;
   bool _loaded = false;
 
+  /// 站内消息未读数：宫格「站内消息」右上角红点
+  int _unread = 0;
+
   late final AppUpdateChecker _updater = widget.updater ?? appUpdateChecker;
 
   @override
@@ -40,6 +47,8 @@ class _MeTabState extends State<MeTab> {
     final auth = context.read<AuthProvider>();
     if (!auth.loggedIn) return;
     await auth.loadProfile();
+    // 未读数单独拉，失败不影响个人中心主体数据
+    unawaited(_refreshUnread());
     try {
       final points = await pointsApi.summary();
       if (!mounted) return;
@@ -55,6 +64,16 @@ class _MeTabState extends State<MeTab> {
         return;
       }
       setState(() => _loaded = true);
+    }
+  }
+
+  /// 未读数只驱动宫格红点：失败静默，不打断个人中心其它数据
+  Future<void> _refreshUnread() async {
+    try {
+      final unread = await messageApi.unreadCount();
+      if (mounted) setState(() => _unread = unread);
+    } on ApiException {
+      // 消息模块异常不影响页面：保留上一次的数字
     }
   }
 
@@ -405,13 +424,18 @@ class _MeTabState extends State<MeTab> {
     final canInstall = context.watch<AuthProvider>().user?.canInstall ?? false;
 
     final entries = <_GridEntry>[
+      // 站内消息排第一：团队长绑定的装机人靠这里看下级装机申请，红点=未读数
+      _GridEntry(Icons.notifications_none, '站内消息', () async {
+        await context.push('/messages');
+        // 详情打开后后端已置已读，回来刷新一次红点
+        if (mounted) await _refreshUnread();
+      }, badge: _unread),
       _GridEntry(Icons.account_tree, '我的队伍', () => context.push('/team')),
       _GridEntry(Icons.group, '我的团队', () => context.push('/my-team')),
       _GridEntry(Icons.savings, '积分中心', () => context.push('/points')),
       _GridEntry(Icons.point_of_sale, '我的机器', () => context.push('/machines')),
       _GridEntry(Icons.qr_code, '推荐海报', () => context.push('/referral')),
       _GridEntry(Icons.location_on, '收货地址', () => context.push('/addresses')),
-      _GridEntry(Icons.card_giftcard, '积分礼包', () => context.push('/packages')),
       _GridEntry(Icons.headset_mic, '帮助与客服', () => showToast(context, '功能开发中')),
       if (canInstall)
         _GridEntry(
@@ -427,7 +451,8 @@ class _MeTabState extends State<MeTab> {
       if (rows.isNotEmpty) rows.add(const SizedBox(height: 12));
       rows.add(Row(
         children: [
-          for (final e in chunk) _gridItem(context, e.icon, e.label, e.onTap),
+          for (final e in chunk)
+            _gridItem(context, e.icon, e.label, e.onTap, badge: e.badge),
           for (var i = chunk.length; i < _gridColumns; i++)
             const Expanded(child: SizedBox()),
         ],
@@ -441,7 +466,8 @@ class _MeTabState extends State<MeTab> {
   }
 
   Widget _gridItem(
-      BuildContext context, IconData icon, String label, VoidCallback onTap) {
+      BuildContext context, IconData icon, String label, VoidCallback onTap,
+      {int badge = 0}) {
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -450,14 +476,20 @@ class _MeTabState extends State<MeTab> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           child: Column(
             children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: kqwPrimary.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(icon, size: 24, color: kqwPrimary),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: kqwPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(icon, size: 24, color: kqwPrimary),
+                  ),
+                  if (badge > 0) UnreadBadge(count: badge),
+                ],
               ),
               const SizedBox(height: 8),
               Text(label,
@@ -533,9 +565,12 @@ class _MeTabState extends State<MeTab> {
 
 /// 功能宫格入口（图标 + 文案 + 点击），由 [_MeTabState._featureGrid] 按行分块渲染
 class _GridEntry {
-  const _GridEntry(this.icon, this.label, this.onTap);
+  const _GridEntry(this.icon, this.label, this.onTap, {this.badge = 0});
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+
+  /// 右上角红点数字（0 = 不显示），目前只有站内消息用
+  final int badge;
 }
